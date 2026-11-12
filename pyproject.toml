@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "erp-software"
+version = "1.0.0"
+description = "A simple, keyboard friendly and fully customisable web based ERP built on Tornado."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+authors = [{ name = "Ercan Ersoy" }]
+dependencies = ["tornado>=6.4"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: Tornado",
+  "Natural Language :: Turkish",
+  "Natural Language :: English",
+  "Topic :: Office/Business",
+]
+
+[project.optional-dependencies]
+mysql = ["PyMySQL>=1.1"]
+mariadb = ["PyMySQL>=1.1"]
+mssql = ["pyodbc>=5.0"]
+postgresql = ["psycopg[binary]>=3.1"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+erp-software = "erp.app:main"
+
+[tool.setuptools.packages.find]
+include = ["erp*"]
+
+[tool.setuptools.package-data]
+erp = ["templates/*.html", "static/*", "locales/*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

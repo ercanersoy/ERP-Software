@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ t("error.title") }} {{ title }}</h1>
+<p class="error" role="alert">{{ message }}</p>
+{% if detail %}<pre class="trace">{{ detail }}</pre>{% end %}
+<ul class="menu"><li><a href="/" data-nav data-key="1"><kbd>1</kbd> {{ t("menu.main") }}</a></li></ul>
+{% end %}

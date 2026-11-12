@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+{% if empty %}<p class="notice">{{ empty }}</p>{% end %}
+<ul class="menu">
+{% for item in items %}
+  <li{% if item.get("sep") %} class="sep"{% end %}><a href="{{ item['url'] }}" data-nav{% if item["key"] %} data-key="{{ item['key'] }}"{% end %}><kbd>{{ item["key"] or "·" }}</kbd> {{ item["label"] }}{% if item.get("submenu") %} …{% end %}</a>{% if item.get("hint") %} <span class="hint">{{ item["hint"] }}</span>{% end %}</li>
+{% end %}
+</ul>
+{% end %}

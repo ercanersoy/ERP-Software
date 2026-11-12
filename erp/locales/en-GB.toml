@@ -1,0 +1,17 @@
+# English (United Kingdom)
+# Only the texts that differ from English (United States) are listed here;
+# everything else is taken from en-US.toml. Dates use DD/MM/YYYY and the
+# 24-hour clock, amounts use the £ sign for GBP (see erp/i18n.py).
+
+[admin]
+menus_hint = "Menu groups that organise the data screens"
+apikeys_hint = "Authorised access for other systems and sensors"
+
+[backup]
+confirm_full_required = "This is a full backup. Tick “Replace the whole database” to restore it."
+
+[apikeys]
+expires_at = "Expiry date"
+
+[data]
+updated_at = "Modified"

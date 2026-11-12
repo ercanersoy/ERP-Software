@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+{% if actions %}
+<div class="toolbar">
+  {% for a in actions %}<a class="button" href="{{ a['url'] }}" data-key="{{ a['key'].lower() }}"><kbd>{{ a["key"] }}</kbd> {{ a["label"] }}</a> {% end %}
+</div>
+{% end %}
+<dl class="view">
+{% for it in items %}
+  <dt>{{ it["label"] }}</dt>
+  <dd>{% if it.get("media") == "image" %}<a href="{{ it['url'] }}"><img src="{{ it['url'] }}" alt="{{ it['text'] }}"></a><br><a href="{{ it['url'] }}?download=1">{{ it["text"] }}</a>
+  {% elif it.get("media") == "video" %}<video src="{{ it['url'] }}" controls preload="metadata"></video><br><a href="{{ it['url'] }}?download=1">{{ it["text"] }}</a>
+  {% elif it.get("url") %}<a href="{{ it['url'] }}">{{ it["text"] }}</a>
+  {% elif it.get("multiline") %}<span class="multi">{{ it["text"] }}</span>
+  {% else %}{{ it["text"] }}{% end %}</dd>
+{% end %}
+{% for label, text in meta %}
+  <dt class="meta">{{ label }}</dt><dd class="meta">{{ text }}</dd>
+{% end %}
+</dl>
+{% end %}

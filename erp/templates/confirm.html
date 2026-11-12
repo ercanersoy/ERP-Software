@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+<form method="post" action="{{ action }}" data-main>
+{% module xsrf_form_html() %}
+<p class="{{ 'warn' if danger else 'intro' }}">{{ message }}</p>
+{% if confirm_input %}
+<div class="row">
+  <label for="f_confirm">{{ t("common.type_to_confirm", name=confirm_input) }}</label>
+  <div class="ctl"><input type="text" id="f_confirm" name="confirm" required autocomplete="off" autofocus></div>
+</div>
+{% end %}
+<div class="actions">
+  <button type="submit" class="{{ 'danger' if danger else 'primary' }}"{% if not confirm_input %} autofocus{% end %}>{{ button }}</button>
+  {% if back_url %}<a class="button" href="{{ back_url }}">{{ t("common.cancel") }}</a> <kbd>Esc</kbd>{% end %}
+</div>
+</form>
+{% end %}
