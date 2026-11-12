@@ -115,6 +115,7 @@ last_admin = "En az bir etkin yönetici kalmalıdır."
 invalid_network = "Her satıra bir IP adresi veya 192.168.1.0/24 gibi bir ağ girin."
 invalid_toml = "Dosya geçerli bir TOML değil: {detail}"
 not_a_backup = "Dosya bir ERP-Software dışa aktarımı değil."
+entity_referenced = "Başka veri ekranları bu ekrana bağlanıyor ({fields}). Önce o bağlantı alanlarını silin."
 backup_without_admin = "Yedekte hiç yönetici yok; geri yüklenmedi."
 
 [setup]

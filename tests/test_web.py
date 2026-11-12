@@ -211,3 +211,27 @@ class AppTests(WebTestCase):
         r = self.fetch("/admin/settings", method="POST", body="company_name=x",
                        headers={"Cookie": "; ".join(f"{k}={v}" for k, v in self.cookies.items() if k != "_xsrf")})
         self.assertEqual(r.code, 403)
+
+    def test_linked_entity_can_not_be_deleted(self):
+        self.create_entity("customers", "Customers")
+        self.create_entity("invoices", "Invoices")
+        self.add_field("invoices", "customer", "reference", ref_entity="customers")
+        r = self.post("/admin/entities/customers/delete", {"confirm": "customers"})
+        self.assertEqual(r.headers["Location"], "/admin/entities/customers")
+        self.assertIn("invoices.customer", self.text(self.get("/admin/entities/customers")))
+        self.post("/admin/entities/invoices/fields/customer/delete", {"confirm": "customer"})
+        r = self.post("/admin/entities/customers/delete", {"confirm": "customers"})
+        self.assertEqual(r.headers["Location"], "/admin/entities")
+
+    def test_dealer_can_not_link_to_hidden_records(self):
+        self.create_entity("customers", "Customers", perm_dealer="own")
+        self.add_field("customers", "name", "text")
+        self.create_entity("orders", "Orders", perm_dealer="own")
+        self.add_field("orders", "customer", "reference", ref_entity="customers")
+        self.post("/data/customers/new", {"name": "Secret customer"})
+        self.post("/admin/users/new", {"username": "bayi2", "role": "dealer", "active": "1", "password": "dealer123"})
+        self.post("/logout")
+        self.login("bayi2", "dealer123")
+        r = self.post("/data/orders/new", {"customer": "1"})
+        self.assertIn("linked record does not exist", self.text(r))
+        self.assertNotIn("Secret customer", self.text(r))

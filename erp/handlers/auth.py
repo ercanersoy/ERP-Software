@@ -46,6 +46,10 @@ class LoginHandler(BaseHandler):
             if time.monotonic() - since >= LOCK_SECONDS:
                 count, since = 0, time.monotonic()
             failures[key] = (count + 1, since)
+            if len(failures) > 10_000:  # forget old entries so memory stays bounded
+                now = time.monotonic()
+                for k in [k for k, (_, t0) in failures.items() if now - t0 >= LOCK_SECONDS]:
+                    del failures[k]
             await asyncio.sleep(0.5)
             return self.show(username, self.t("login.failed"))
         failures.pop(key, None)

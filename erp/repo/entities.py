@@ -246,8 +246,22 @@ def update_entity(conn: Conn, ent: Entity) -> None:
     conn.update("erp_entities", _entity_values(ent), {"id": ent.id})
 
 
+def referencing_fields(conn: Conn, name: str) -> list[str]:
+    """``entity.field`` names of link fields of *other* entities that point to ``name``."""
+    rows = conn.all(
+        f"SELECT e.{conn.q('name')} AS entity_name, f.{conn.q('name')} AS field_name "
+        f"FROM {conn.q('erp_fields')} f JOIN {conn.q('erp_entities')} e ON e.{conn.q('id')} = f.{conn.q('entity_id')} "
+        f"WHERE f.{conn.q('ref_entity')} = ? AND e.{conn.q('name')} <> ?",
+        [name, name],
+    )
+    return sorted(f"{r['entity_name']}.{r['field_name']}" for r in rows)
+
+
 def delete_entity(conn: Conn, ent: Entity) -> list[dict]:
     """Drop the entity and its table; returns file rows that must be removed."""
+    users = referencing_fields(conn, ent.name)
+    if users:
+        raise ValidationError("error.entity_referenced", fields=", ".join(users))
     files = conn.all(f"SELECT * FROM {conn.q('erp_files')} WHERE {conn.q('entity')} = ?", [ent.name])
     conn.delete("erp_files", {"entity": ent.name})
     conn.delete("erp_fields", {"entity_id": ent.id})

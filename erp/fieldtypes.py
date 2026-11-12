@@ -176,6 +176,8 @@ class Field:
             case "integer" | "reference" | "document" | "image" | "video":
                 if isinstance(raw, bool):
                     raise ValidationError("error.invalid_integer")
+                if isinstance(raw, float) and raw.is_integer():
+                    raw = int(raw)
                 try:
                     value = int(str(raw).replace(" ", ""))
                 except ValueError:

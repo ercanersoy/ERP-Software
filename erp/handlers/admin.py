@@ -222,7 +222,12 @@ class EntityDeleteHandler(AdminHandler):
             self.flash(self.t("error.confirm_mismatch"), "error")
             self.redirect(self.request.path)
             return
-        removed = await self.db(entities_repo.delete_entity, ent)
+        try:
+            removed = await self.db(entities_repo.delete_entity, ent)
+        except ValidationError as exc:
+            self.flash(self.t(exc.key, **exc.params), "error")
+            self.redirect(f"/admin/entities/{ent.name}")
+            return
         files_repo.remove_from_disk(self.state.config.upload_dir, removed)
         await self.audit("entity_delete", ent.name)
         self.flash(self.t("entities.deleted"))
@@ -303,7 +308,7 @@ class FieldFormHandler(AdminHandler):
             title = t("fields.edit")
         extra = ""
         if f is not None:
-            extra = f'<p><a href="/admin/entities/{ent.name}/fields/{f.name}/delete" data-delete>{tornado.escape.xhtml_escape(t("fields.delete"))}</a></p>'
+            extra = f'<p><a href="/admin/entities/{ent.name}/fields/{f.name}/delete" data-key="del"><kbd>Del</kbd> {tornado.escape.xhtml_escape(t("fields.delete"))}</a></p>'
         self.form_page(title, self.fields(ent, f, all_entities, values, errors), crumbs, error=error, extra=extra)
 
     async def get(self, name: str, fname: str | None = None) -> None:
@@ -435,7 +440,7 @@ class MenuFormHandler(AdminHandler):
         url = f"/admin/menus/{menu['id']}" if menu else "/admin/menus/new"
         extra = ""
         if menu:
-            extra = f'<p><a href="/admin/menus/{menu["id"]}/delete" data-delete>{tornado.escape.xhtml_escape(t("menus.delete"))}</a></p>'
+            extra = f'<p><a href="/admin/menus/{menu["id"]}/delete" data-key="del"><kbd>Del</kbd> {tornado.escape.xhtml_escape(t("menus.delete"))}</a></p>'
         self.form_page(t("menus.edit") if menu else t("menus.new"), fields,
                        self.admin_crumbs((t("admin.menus"), "/admin/menus"), (menu["title"] if menu else t("menus.new"), url)),
                        error=error, extra=extra)
@@ -534,7 +539,7 @@ class UserFormHandler(AdminHandler):
         url = f"/admin/users/{target['id']}" if target else "/admin/users/new"
         extra = ""
         if target and target["id"] != self.user["id"]:
-            extra = f'<p><a href="/admin/users/{target["id"]}/delete" data-delete>{tornado.escape.xhtml_escape(t("users.delete"))}</a></p>'
+            extra = f'<p><a href="/admin/users/{target["id"]}/delete" data-key="del"><kbd>Del</kbd> {tornado.escape.xhtml_escape(t("users.delete"))}</a></p>'
         self.form_page(t("users.edit") if target else t("users.new"), fields,
                        self.admin_crumbs((t("admin.users"), "/admin/users"), (target["username"] if target else t("users.new"), url)),
                        error=error, extra=extra)
@@ -667,7 +672,7 @@ class ApiKeyFormHandler(AdminHandler):
         url = f"/admin/apikeys/{key['id']}" if key else "/admin/apikeys/new"
         extra = ""
         if key:
-            extra = f'<p><a href="/admin/apikeys/{key["id"]}/delete" data-delete>{tornado.escape.xhtml_escape(t("apikeys.delete"))}</a></p>'
+            extra = f'<p><a href="/admin/apikeys/{key["id"]}/delete" data-key="del"><kbd>Del</kbd> {tornado.escape.xhtml_escape(t("apikeys.delete"))}</a></p>'
         self.form_page(t("apikeys.edit") if key else t("apikeys.new"), fields,
                        self.admin_crumbs((t("admin.apikeys"), "/admin/apikeys"), (key["name"] if key else t("apikeys.new"), url)),
                        error=error, extra=extra)

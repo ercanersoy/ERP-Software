@@ -137,7 +137,11 @@ def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | N
                 errors[f.name] = ValidationError("error.not_unique")
         if f.field_type == "reference":
             target = entities_repo.get_entity(conn, f.ref_entity or "")
-            if target is None or get_record(conn, target, value) is None:
+            linked = get_record(conn, target, value) if target is not None else None
+            if linked is None:
+                errors[f.name] = ValidationError("error.reference_missing")
+            elif user is not None and (not target.can_read(user) or
+                                       target.owner_filter(user) not in (None, linked["created_by"])):
                 errors[f.name] = ValidationError("error.reference_missing")
         if f.is_file:
             row = files_repo.get_file(conn, value)

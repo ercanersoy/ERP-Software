@@ -115,6 +115,7 @@ last_admin = "At least one active administrator must remain."
 invalid_network = "Enter IP addresses or networks such as 192.168.1.0/24, one per line."
 invalid_toml = "The file is not valid TOML: {detail}"
 not_a_backup = "The file is not an ERP-Software export."
+entity_referenced = "Other data screens link to this one ({fields}). Delete those link fields first."
 backup_without_admin = "The backup contains no administrator; it was not restored."
 
 [setup]
