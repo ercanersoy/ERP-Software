@@ -95,8 +95,10 @@ class ApiAuth:
             return
         state = self.application.settings["erp_state"]
         now = time.monotonic()
-        last = state.api_last_write.get(self.key["id"], 0.0)
-        wait = interval / 1000 - (now - last)
+        last = state.api_last_write.get(self.key["id"])
+        # A key that has not written yet is never limited.  (Using 0.0 as the
+        # default was wrong: time.monotonic() starts near zero after a reboot.)
+        wait = interval / 1000 - (now - last) if last is not None else 0
         if wait > 0:
             raise ApiError(429, "too_many_requests", f"minimum interval is {interval} ms",
                            {"retry_after_ms": int(wait * 1000) + 1})
