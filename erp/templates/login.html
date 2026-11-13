@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ t("login.title") }}</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% end %}
+<form method="post" action="/login" class="login" data-main>
+{% module xsrf_form_html() %}
+<input type="hidden" name="next" value="{{ next_url }}">
+<div class="row">
+  <label for="f_username">{{ t("users.username") }}</label>
+  <div class="ctl"><input type="text" id="f_username" name="username" value="{{ username }}" required autofocus autocomplete="username" autocapitalize="none"></div>
+</div>
+<div class="row">
+  <label for="f_password">{{ t("users.password") }}</label>
+  <div class="ctl"><input type="password" id="f_password" name="password" required autocomplete="current-password"></div>
+</div>
+<div class="actions"><button type="submit" class="primary">{{ t("login.submit") }}</button> <kbd>Enter</kbd></div>
+</form>
+<p class="help"><a href="/help">{{ t("menu.help") }}</a></p>
+{% end %}

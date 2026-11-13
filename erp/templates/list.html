@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+{% if description %}<p class="desc">{{ description }}</p>{% end %}
+{% if notice %}<p class="notice">{{ notice }}</p>{% end %}
+{% if actions or search %}
+<div class="toolbar">
+  {% for a in actions %}<a class="button" href="{{ a['url'] }}" data-key="{{ a['key'].lower() }}"><kbd>{{ a["key"] }}</kbd> {{ a["label"] }}</a> {% end %}
+  {% if search %}
+  <form method="get" class="search" role="search">
+    <input type="search" name="q" value="{{ q }}" data-search aria-label="{{ t('common.search') }}" placeholder="{{ t('common.search') }} (/)">
+    {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ 'desc' if desc else 'asc' }}">{% end %}
+    <button type="submit">{{ t("common.search") }}</button>
+    {% if q %}<a href="?">{{ t("common.clear") }}</a>{% end %}
+  </form>
+  {% end %}
+</div>
+{% end %}
+{% if rows %}
+<table class="grid rows">
+<thead><tr>
+{% for c in columns %}<th{% if c.get("num") %} class="num"{% end %} scope="col">{% if sort_base and c.get("key") %}<a href="{{ sort_base }}&amp;sort={{ c['key'] }}&amp;dir={{ 'asc' if (sort == c['key'] and desc) else 'desc' }}">{{ c["label"] }}{% if sort == c["key"] %}{{ " ▼" if desc else " ▲" }}{% end %}</a>{% else %}{{ c["label"] }}{% end %}</th>{% end %}
+</tr></thead>
+<tbody>
+{% for r in rows %}
+<tr{% if r.get("url") %} data-href="{{ r['url'] }}" data-nav tabindex="0"{% end %}>
+{% for i, cell in enumerate(r["cells"]) %}<td{% if i < len(columns) and columns[i].get("num") %} class="num"{% end %}>{% if i == 0 and r.get("url") %}<a href="{{ r['url'] }}" tabindex="-1">{{ cell["text"] }}</a>{% elif cell.get("url") %}<a href="{{ cell['url'] }}">{{ cell["text"] }}</a>{% else %}{{ cell["text"] }}{% end %}</td>{% end %}
+</tr>
+{% end %}
+</tbody>
+</table>
+{% else %}
+<p class="empty">{{ empty }}</p>
+{% end %}
+{% if pages > 1 or total %}
+<p class="pager">
+  {% if base_url and page > 1 %}<a href="{{ base_url }}&amp;page={{ page - 1 }}" data-prev>« {{ t("common.prev") }}</a> <kbd>PgUp</kbd>{% end %}
+  {{ t("common.page_of", page=page, pages=pages, total=total) }}
+  {% if base_url and page < pages %}<kbd>PgDn</kbd> <a href="{{ base_url }}&amp;page={{ page + 1 }}" data-next>{{ t("common.next") }} »</a>{% end %}
+</p>
+{% end %}
+{% end %}

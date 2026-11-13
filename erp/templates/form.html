@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+{% if intro %}<p class="intro">{{ intro }}</p>{% end %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% end %}
+<form method="post" action="{{ action }}"{% if multipart %} enctype="multipart/form-data"{% end %} data-main>
+{% module xsrf_form_html() %}
+{% for f in fields %}
+{% if f.type == "hidden" %}<input type="hidden" name="{{ f.name }}" value="{{ f.value if f.value is not None else '' }}">{% else %}
+<div class="row{% if f.error %} has-error{% end %}">
+  {% if f.type == "checkboxes" %}<span class="label" id="l_{{ f.name }}">{{ f.label }}</span>{% else %}<label for="f_{{ f.name }}">{{ f.label }}{% if f.required %} <span class="req" title="{{ t('common.required') }}">*</span>{% end %}</label>{% end %}
+  <div class="ctl">
+  {% if f.type == "static" %}<span class="static" id="f_{{ f.name }}">{{ f.value if f.value is not None else "" }}</span>
+  {% elif f.type == "textarea" %}<textarea id="f_{{ f.name }}" name="{{ f.name }}" rows="4"{% if f.required %} required{% end %}{% for k, v in f.attrs.items() %} {{ k }}="{{ v }}"{% end %}>{{ f.value if f.value is not None else "" }}</textarea>
+  {% elif f.type == "select" %}<select id="f_{{ f.name }}" name="{{ f.name }}"{% if f.required %} required{% end %}>{% for v, l in f.options %}<option value="{{ v }}"{% if str(v) in f.values %} selected{% end %}>{{ l }}</option>{% end %}</select>
+  {% elif f.type == "checkbox" %}<input type="checkbox" id="f_{{ f.name }}" name="{{ f.name }}" value="1"{% if f.value in (True, 1, "1", "on", "true") %} checked{% end %}>
+  {% elif f.type == "checkboxes" %}<fieldset aria-labelledby="l_{{ f.name }}">{% for v, l in f.options %}<label class="opt"><input type="checkbox" name="{{ f.name }}" value="{{ v }}"{% if str(v) in f.values %} checked{% end %}> {{ l }}</label>{% end %}{% if not f.options %}<span class="static">—</span>{% end %}</fieldset>
+  {% elif f.type == "file" %}{% if f.current %}<span class="current"><a href="/files/{{ f.current['id'] }}">{{ f.current["original_name"] }}</a> <label class="opt"><input type="checkbox" name="__remove_{{ f.name }}" value="1"> {{ t("data.remove_file") }}</label></span><br>{% end %}<input type="file" id="f_{{ f.name }}" name="{{ f.name }}"{% if f.required and not f.current %} required{% end %}{% for k, v in f.attrs.items() %} {{ k }}="{{ v }}"{% end %}>
+  {% else %}<input type="{{ f.type }}" id="f_{{ f.name }}" name="{{ f.name }}" value="{{ f.value if f.value is not None else '' }}"{% if f.required and f.type != "password" %} required{% end %}{% for k, v in f.attrs.items() %} {{ k }}="{{ v }}"{% end %}>
+  {% end %}
+  {% if f.suffix %}<span class="suffix">{{ f.suffix }}</span>{% end %}
+  {% if f.error %}<span class="ferror">{{ f.error }}</span>{% end %}
+  {% if f.help %}<span class="help">{{ f.help }}</span>{% end %}
+  </div>
+</div>
+{% end %}
+{% end %}
+<div class="actions">
+  <button type="submit" class="primary">{{ submit }}</button> <kbd>Ctrl+S</kbd>
+  {% for name, value, label in buttons %} <button type="submit" name="{{ name }}" value="{{ value }}"{% if name == "action" %} formnovalidate{% end %}>{{ label }}</button>{% end %}
+  {% if cancel_url %} <a class="button" href="{{ cancel_url }}">{{ t("common.cancel") }}</a> <kbd>Esc</kbd>{% end %}
+</div>
+</form>
+{% raw extra %}
+{% end %}

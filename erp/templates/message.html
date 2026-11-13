@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+<p class="message">{{ message }}</p>
+{% if code %}<pre class="token" tabindex="0">{{ code }}</pre>{% end %}
+{% if links %}
+<ul class="menu">
+{% for i, (label, url) in enumerate(links) %}<li><a href="{{ url }}" data-nav data-key="{{ i + 1 }}"><kbd>{{ i + 1 }}</kbd> {{ label }}</a></li>{% end %}
+</ul>
+{% end %}
+{% end %}

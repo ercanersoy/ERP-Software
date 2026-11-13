@@ -1,0 +1,10 @@
+# Required
+tornado>=6.4
+
+# Optional database drivers (install the one you need)
+# MySQL / MariaDB:
+# PyMySQL>=1.1
+# Microsoft SQL Server:
+# pyodbc>=5.0
+# PostgreSQL:
+# psycopg[binary]>=3.1

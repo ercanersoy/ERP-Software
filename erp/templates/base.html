@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="{{ loc.code }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}{% if title %} - {% end %}{{ cfg.get("company_name") or "ERP" }}</title>
+<link rel="stylesheet" href="{{ static_url('style.css') }}">
+<script src="{{ static_url('app.js') }}" defer></script>
+</head>
+<body class="{{ page_class }}"{% if back_url %} data-back="{{ back_url }}"{% end %}>
+<a class="skip" href="#main">{{ t("common.skip") }}</a>
+<header class="top">
+  <a class="brand" href="/">{{ cfg.get("company_name") or "ERP" }}</a>
+  <span class="right">
+    {% if user %}<a href="/account" class="who">{{ user.get("full_name") or user["username"] }}</a>
+    <span class="role">({{ t("role." + user["role"]) }})</span> ·{% end %}
+    {% for lang_code in languages %}{% if lang_code == loc.code %}<strong class="lang">{{ lang_code }}</strong>{% else %}<a class="lang" lang="{{ lang_code }}" hreflang="{{ lang_code }}" href="{% if not installed %}/setup?lang={{ lang_code }}{% elif not user %}/login?lang={{ lang_code }}{% else %}/lang/{{ lang_code }}?next={{ url_escape(request.uri) }}{% end %}">{{ lang_code }}</a>{% end %} {% end %}
+    {% if user %}· <a href="/logout">{{ t("menu.logout") }}</a>{% end %}
+  </span>
+</header>
+{% if crumbs %}
+<nav class="crumbs" aria-label="{{ t('common.breadcrumb') }}">
+  {% for crumb_i, (crumb_label, crumb_url) in enumerate(crumbs) %}{% if crumb_i %} › {% end %}{% if crumb_i < len(crumbs) - 1 %}<a href="{{ crumb_url }}">{{ crumb_label }}</a>{% else %}<span aria-current="page">{{ crumb_label }}</span>{% end %}{% end %}
+</nav>
+{% end %}
+<main id="main">
+{% if flash %}<p class="flash {{ flash[0] }}" role="status">{{ flash[1] }}</p>{% end %}
+{% block body %}{% end %}
+</main>
+<footer class="keys">
+  <kbd>Esc</kbd> {{ t("keys.back") }} · <kbd>0</kbd> {{ t("keys.main") }} · <kbd>↑</kbd><kbd>↓</kbd> {{ t("keys.move") }} · <kbd>Enter</kbd> {{ t("keys.open") }} · <kbd>?</kbd> {{ t("keys.help") }}
+</footer>
+<div id="keyhelp" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="keyhelp-title">
+  <div class="box">
+    <h2 id="keyhelp-title">{{ t("keys.title") }}</h2>
+    <table class="grid">
+      <tr><td><kbd>1</kbd>…<kbd>9</kbd>, <kbd>a</kbd>…<kbd>z</kbd></td><td>{{ t("keys.menu_item") }}</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Home</kbd> <kbd>End</kbd></td><td>{{ t("keys.move") }}</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>{{ t("keys.open") }}</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>{{ t("keys.back") }}</td></tr>
+      <tr><td><kbd>0</kbd></td><td>{{ t("keys.main") }}</td></tr>
+      <tr><td><kbd>/</kbd></td><td>{{ t("keys.search") }}</td></tr>
+      <tr><td><kbd>n</kbd></td><td>{{ t("keys.new") }}</td></tr>
+      <tr><td><kbd>e</kbd></td><td>{{ t("keys.edit") }}</td></tr>
+      <tr><td><kbd>Del</kbd></td><td>{{ t("keys.delete") }}</td></tr>
+      <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>{{ t("keys.pages") }}</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd>, <kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>{{ t("keys.save") }}</td></tr>
+      <tr><td><kbd>?</kbd>, <kbd>F1</kbd></td><td>{{ t("keys.help") }}</td></tr>
+    </table>
+    <p><button type="button" data-close>{{ t("common.close") }}</button> <kbd>Esc</kbd></p>
+  </div>
+</div>
+</body>
+</html>

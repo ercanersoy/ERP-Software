@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ title }}</h1>
+<div class="toolbar monitor-controls">
+  <label for="interval">{{ t("data.read_interval") }}</label>
+  <input type="number" id="interval" min="100" max="86400000" step="100" value="{{ interval }}"> ms
+  <button type="button" id="pause" data-key="p"><kbd>p</kbd> <span data-label-pause="{{ t('data.pause') }}" data-label-resume="{{ t('data.resume') }}">{{ t("data.pause") }}</span></button>
+  <a class="button" href="/data/{{ ent.name }}" data-key="l"><kbd>l</kbd> {{ t("data.list") }}</a>
+  <span class="status" id="status" aria-live="polite"></span>
+</div>
+<table class="grid" id="monitor" data-src="/data/{{ ent.name }}/latest.json?n=20" data-interval="{{ interval }}" data-error="{{ t('data.monitor_error') }}" data-updated="{{ t('data.updated') }}">
+<thead><tr>{% for c in columns %}<th scope="col">{{ c }}</th>{% end %}</tr></thead>
+<tbody></tbody>
+</table>
+<p class="help">{{ t("data.monitor_help") }}</p>
+{% end %}

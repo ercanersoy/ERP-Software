@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+<nav class="helpnav" aria-label="{{ t('menu.help') }}">
+  <ul class="menu">
+  {% for i, (name, heading) in enumerate(pages) %}<li><a href="/help/{{ name }}" data-nav data-key="{{ i + 1 }}"{% if name == page %} aria-current="page"{% end %}><kbd>{{ i + 1 }}</kbd> {{ heading }}</a></li>{% end %}
+  </ul>
+</nav>
+<article class="doc">
+{% raw body %}
+</article>
+{% end %}
