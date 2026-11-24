@@ -39,7 +39,9 @@ FULL_TABLES = ("erp_meta", "erp_settings", "erp_users", "erp_menus", "erp_entiti
 
 
 class BackupError(Exception):
+    """An import/restore problem; ``key`` is a translation key, ``params`` fill it."""
     def __init__(self, key: str, **params):
+        """Store the translation key and its parameters."""
         super().__init__(key)
         self.key = key
         self.params = params
@@ -81,6 +83,7 @@ def coerce(kind: str, value):
 
 
 def _table_rows(conn: Conn, table: Table, where: str = "", params=()) -> list[dict]:
+    """All rows of a system table, coerced to the Python types of its columns, ordered by id."""
     order = f" ORDER BY {conn.q('id')}" if table.column("id") else ""
     rows = conn.all(f"SELECT * FROM {conn.q(table.name)}{where}{order}", params)
     out = []
@@ -90,11 +93,13 @@ def _table_rows(conn: Conn, table: Table, where: str = "", params=()) -> list[di
 
 
 def _entity_rows(conn: Conn, ent) -> list[dict]:
+    """All records of an entity in id order."""
     rows = records_repo.list_records(conn, ent, order="id", desc=False, limit=None)
     return rows
 
 
 def _file_rows(conn: Conn, entity_names: list[str] | None) -> list[dict]:
+    """File metadata rows: all (``None``), none (``[]``) or those of the named entities."""
     table = SYSTEM_TABLE_MAP["erp_files"]
     if entity_names is None:
         return _table_rows(conn, table)
@@ -136,11 +141,17 @@ def snapshot(conn: Conn, kind: str, entity_names: list[str] | None = None) -> di
 
 # ====================================================================== TOML
 def _strip_none(row: dict) -> dict:
+    """Drop ``None`` values; TOML has no null."""
     return {k: v for k, v in row.items() if v is not None}
 
 
 def to_toml(conn: Conn, kind: str, charset: str = "utf-8", entity_names: list[str] | None = None,
             include_files: bool = False, upload_dir: str | None = None) -> bytes:
+    """Export as TOML; returns the encoded file.
+
+    ``include_files`` embeds the uploaded files as base64 (data and full
+    backups only), so a single file restores everything on another server.
+    """
     charset = charsets.normalize(charset)
     snap = snapshot(conn, kind, entity_names)
     doc: dict = {
@@ -203,6 +214,7 @@ def to_toml(conn: Conn, kind: str, charset: str = "utf-8", entity_names: list[st
 
 # ====================================================================== SQL
 def _insert_statements(d: Dialect, table: Table, rows: list[dict]) -> list[str]:
+    """INSERT statements for ``rows`` of ``table``, wrapped in the dialect's explicit-id statements."""
     if not rows:
         return []
     cols = [c.name for c in table.columns]
@@ -221,6 +233,13 @@ def _insert_statements(d: Dialect, table: Table, rows: list[dict]) -> list[str]:
 
 def to_sql(conn: Conn, kind: str, dialect_name: str | None = None, charset: str = "utf-8",
            entity_names: list[str] | None = None) -> bytes:
+    """Export as an SQL script for the chosen database system; returns the encoded file.
+
+    * full: drops and re-creates every table, then inserts all rows;
+    * config/schema: creates missing tables and replaces the definition rows;
+    * data: creates missing tables and replaces the records of the chosen
+      entities and their file rows.
+    """
     charset = charsets.normalize(charset)
     d = get_dialect(dialect_name or conn.dialect.name)
     snap = snapshot(conn, kind, entity_names)
@@ -277,6 +296,12 @@ def to_sql(conn: Conn, kind: str, dialect_name: str | None = None, charset: str 
 
 # ====================================================================== import
 def load_toml(data: bytes, charset: str | None = None) -> dict:
+    """Decode and parse an uploaded TOML backup.
+
+    The character set is the one chosen by the user, else the one declared in
+    the file's ``# charset:`` comment or byte order mark, else UTF-8.
+    Raises :class:`BackupError` unless it is an ERP-Software export.
+    """
     declared = charsets.detect_declared(data)
     cs = charsets.normalize(charset) if charset else (declared or "utf-8")
     text = charsets.decode(data, cs)
@@ -291,6 +316,7 @@ def load_toml(data: bytes, charset: str | None = None) -> dict:
 
 
 def _field_from_dict(d: dict) -> Field:
+    """Build a :class:`Field` from a field table of a backup."""
     return Field(
         id=None,
         entity_id=None,
@@ -312,6 +338,7 @@ def _field_from_dict(d: dict) -> Field:
 
 
 def _entity_from_dict(d: dict) -> entities_repo.Entity:
+    """Build an :class:`Entity` with its fields from an entity table of a backup."""
     ent = entities_repo.Entity(
         id=None,
         name=str(d.get("name", "")),
@@ -348,6 +375,8 @@ def _merge_entities(conn: Conn, items: list[dict], menu_ids: set[int]) -> dict[s
         if new.title_field and current.field(new.title_field) is None:
             new.title_field = current.title_field
         entities_repo.update_entity(conn, new)
+        # Existing fields are updated only when the type is unchanged; a field whose type differs is left
+        # alone, since changing a column type could destroy data.
         stats["entities_updated"] += 1
         for fd in item.get("fields", []):
             f = _field_from_dict(fd)
@@ -364,6 +393,7 @@ def _merge_entities(conn: Conn, items: list[dict], menu_ids: set[int]) -> dict[s
 
 
 def _insert_explicit(conn: Conn, table: str, rows: list[dict]) -> None:
+    """Insert rows keeping their ids (``SET IDENTITY_INSERT`` / sequence reset where needed)."""
     if not rows:
         return
     conn.script(conn.dialect.explicit_id_begin(table))
@@ -373,11 +403,13 @@ def _insert_explicit(conn: Conn, table: str, rows: list[dict]) -> None:
 
 
 def _system_row(table_name: str, item: dict) -> dict:
+    """Values of ``item`` for the columns of a system table, coerced to the column types."""
     table = SYSTEM_TABLE_MAP[table_name]
     return {c.name: coerce(c.kind, item.get(c.name)) for c in table.columns if c.name in item}
 
 
 def _convert_record(ent, item: dict) -> tuple[dict, dict]:
+    """Validate a backup record; returns ``(values incl. id and meta columns, errors)``."""
     # partial=True: rows are kept even if a now-required value is missing.
     values, errors = records_repo.validate(ent, {k: v for k, v in item.items() if ent.field(k)}, partial=True)
     meta = {}
@@ -391,6 +423,12 @@ def _convert_record(ent, item: dict) -> tuple[dict, dict]:
 
 
 def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True) -> dict:
+    """Insert records from a backup.
+
+    ``append`` adds the records with new ids; ``replace`` empties each table
+    first and keeps the original ids, so links between records stay valid.
+    Invalid records and records of unknown entities are skipped and counted.
+    """
     stats = {"records": 0, "skipped": 0}
     for name, rows in data.items():
         ent = entities_repo.get_entity(conn, name)
@@ -426,6 +464,7 @@ def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True) 
 
 
 def _restore_files(doc_files: list[dict], upload_dir: str | None) -> list[dict]:
+    """Write embedded file contents to the upload directory; returns the ``erp_files`` rows."""
     rows = []
     for item in doc_files:
         if not isinstance(item, dict):
@@ -467,6 +506,8 @@ def restore_full(conn: Conn, doc: dict, upload_dir: str | None = None) -> dict:
     """Replace the complete database content with a full backup."""
     entity_items = [e for e in doc.get("entities", []) if isinstance(e, dict)]
     new_entities = [_entity_from_dict(e) for e in entity_items]
+    # The restore runs in one transaction (see Database.run_sync): if anything below fails, the old database
+    # content stays untouched.
     for ent in new_entities:  # validate everything before destroying anything
         errors = entities_repo.validate_entity(ent, is_new=True)
         if errors:
@@ -518,6 +559,7 @@ def restore_full(conn: Conn, doc: dict, upload_dir: str | None = None) -> dict:
 
 # ====================================================================== CSV
 def to_csv(conn: Conn, ent, charset: str = "utf-8", delimiter: str = ";", rows: list[dict] | None = None) -> bytes:
+    """Export records as CSV: id, the fields by technical name, created_at and updated_at."""
     import csv
     import io
 
@@ -563,9 +605,12 @@ def parse_csv(ent, data: bytes, charset: str = "utf-8",
 
 
 def file_name(kind: str, fmt: str, company: str = "erp", entity: str | None = None) -> str:
+    """Download file name such as ``ornek-ticaret-data-customers-20260131-120000.toml`` (ASCII only)."""
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")
     import unicodedata
 
+    # NFKD splits 'ş' into 's' + cedilla; the combining marks are then dropped by the ASCII encoding. The
+    # Turkish dotless/dotted i need explicit mapping.
     ascii_name = unicodedata.normalize("NFKD", company.replace("ı", "i").replace("İ", "I"))
     ascii_name = ascii_name.encode("ascii", "ignore").decode().lower()
     base = "-".join("".join(c if c.isalnum() else " " for c in ascii_name).split()) or "erp"
@@ -574,6 +619,7 @@ def file_name(kind: str, fmt: str, company: str = "erp", entity: str | None = No
 
 
 def json_default(value):
+    """``json.dumps`` fallback for decimals and dates."""
     if isinstance(value, decimal.Decimal):
         return str(value)
     if isinstance(value, (dt.datetime, dt.date)):
@@ -582,6 +628,7 @@ def json_default(value):
 
 
 def dumps_json(value) -> str:
+    """JSON text that keeps decimals exact (as strings) and non-ASCII characters readable."""
     return json.dumps(value, default=json_default, ensure_ascii=False)
 
 

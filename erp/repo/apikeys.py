@@ -15,10 +15,16 @@ TOKEN_PREFIX = "erp"
 
 
 def _hash(token: str) -> str:
+    """SHA-256 of a token; only hashes are stored, like for passwords and sessions."""
     return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _row(row: dict | None) -> dict | None:
+    """Decode a key row for use in Python.
+
+    Adds ``entity_list`` (allowed entity names; empty = all) and ``ip_list``
+    (allowed addresses/networks; empty = any), and turns 0/1 into booleans.
+    """
     if row is None:
         return None
     row = dict(row)
@@ -60,6 +66,7 @@ def create_key(conn: Conn, name: str, entities: list[str], can_read: bool, can_w
 
 
 def update_key(conn: Conn, key_id: int, values: dict) -> None:
+    """Change the settings of a key; the token itself can not be changed (create a new key)."""
     values = dict(values)
     if "entities" in values and isinstance(values["entities"], (list, set, tuple)):
         values["entities"] = json.dumps(sorted(set(values["entities"])))
@@ -68,18 +75,26 @@ def update_key(conn: Conn, key_id: int, values: dict) -> None:
 
 
 def list_keys(conn: Conn) -> list[dict]:
+    """All keys ordered by name."""
     return [_row(r) for r in conn.all(f"SELECT * FROM {conn.q('erp_api_keys')} ORDER BY {conn.q('name')}")]
 
 
 def get_key(conn: Conn, key_id: int) -> dict | None:
+    """The key with ``key_id``, or ``None``."""
     return _row(conn.one(f"SELECT * FROM {conn.q('erp_api_keys')} WHERE {conn.q('id')} = ?", [key_id]))
 
 
 def delete_key(conn: Conn, key_id: int) -> None:
+    """Delete a key; clients using it are rejected from then on."""
     conn.delete("erp_api_keys", {"id": key_id})
 
 
 def authenticate(conn: Conn, token: str, ip: str) -> dict | None:
+    """The key row for a valid token sent from an allowed address, else ``None``.
+
+    Checks: known token, active, not expired, client address inside one of the
+    allowed networks.  The time of use is recorded for the key list.
+    """
     if not token or len(token) > 200:
         return None
     row = _row(conn.one(f"SELECT * FROM {conn.q('erp_api_keys')} WHERE {conn.q('token_hash')} = ?", [_hash(token)]))
@@ -95,6 +110,7 @@ def authenticate(conn: Conn, token: str, ip: str) -> dict | None:
 
 
 def ip_allowed(ip: str, networks: list[str]) -> bool:
+    """True when ``ip`` lies in one of ``networks`` (addresses or CIDR networks, IPv4 or IPv6)."""
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -109,6 +125,7 @@ def ip_allowed(ip: str, networks: list[str]) -> bool:
 
 
 def key_allows(key: dict, entity: str, write: bool) -> bool:
+    """True when ``key`` may read (``write=False``) or write records of ``entity``."""
     if write and not key["can_write"]:
         return False
     if not write and not key["can_read"]:

@@ -22,6 +22,7 @@ class ValidationError(ValueError):
     """Raised when a value can not be converted; ``key`` is a translation key."""
 
     def __init__(self, key: str, **params):
+        """``key`` is looked up in the locale files; ``params`` fill its placeholders."""
         super().__init__(key)
         self.key = key
         self.params = params
@@ -29,6 +30,12 @@ class ValidationError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class FieldType:
+    """Static description of a field type.
+
+    ``column_kind`` is the database column kind (see :class:`erp.db.Column`);
+    file types store the id of a row of ``erp_files`` and ``accept`` is the
+    value of the HTML ``accept`` attribute of their upload control.
+    """
     name: str
     column_kind: str
     is_file: bool = False
@@ -73,6 +80,11 @@ IMAGE_MIME = {
 
 
 def sniff_image(head: bytes) -> str | None:
+    """MIME type of an image recognised by its first bytes ("magic numbers"), else ``None``.
+
+    The content decides, not the file name or the type sent by the browser,
+    so a renamed HTML or script file can not be served as an image.
+    """
     for magic, mime in IMAGE_MIME.items():
         if head.startswith(magic):
             return mime
@@ -82,6 +94,7 @@ def sniff_image(head: bytes) -> str | None:
 
 
 def sniff_video(head: bytes) -> str | None:
+    """MIME type of an MP4/QuickTime, WebM or Ogg video recognised by its first bytes, else ``None``."""
     if head[4:8] == b"ftyp":
         brand = head[8:12]
         return "video/quicktime" if brand == b"qt  " else "video/mp4"
@@ -115,23 +128,28 @@ class Field:
 
     @property
     def type(self) -> FieldType:
+        """The :class:`FieldType` of this field."""
         return FIELD_TYPES[self.field_type]
 
     @property
     def is_file(self) -> bool:
+        """True for document, image and video fields."""
         return self.type.is_file
 
     @property
     def choices(self) -> list[str]:
+        """Allowed values of a choice field: one per non-empty line of ``options``."""
         return [line.strip() for line in (self.options or "").splitlines() if line.strip()]
 
     @property
     def scale(self) -> int:
+        """Number of decimal places stored (currency: 4 by default, decimal: 2)."""
         if self.field_type == "currency":
             return 4 if self.decimal_places is None else self.decimal_places
         return 2 if self.decimal_places is None else self.decimal_places
 
     def column(self) -> Column:
+        """Database column for this field (name, kind, length/precision)."""
         kind = self.type.column_kind
         match self.field_type:
             case "text":
@@ -170,6 +188,7 @@ class Field:
                 return value
             case "choice":
                 value = str(raw)
+                # Values are compared exactly (case sensitive) with the configured choices.
                 if self.choices and value not in self.choices:
                     raise ValidationError("error.invalid_choice")
                 return value
@@ -202,6 +221,8 @@ class Field:
                     return raw
                 if isinstance(raw, (int, float)):
                     return bool(raw)
+                # Text values: English and Turkish words for 'yes' ('evet', 'e') and an 'x' as ticked in
+                # spreadsheets; everything else is No.
                 return str(raw).lower() in ("1", "true", "yes", "on", "evet", "e", "y", "x")
             case "date":
                 if isinstance(raw, dt.datetime):
@@ -218,6 +239,14 @@ class Field:
         raise ValidationError("error.invalid_value")  # pragma: no cover
 
     def _parse_decimal(self, raw) -> decimal.Decimal:
+        """Parse a decimal number written with either decimal separator.
+
+        "1.234,56" (Turkish/German) and "1,234.56" (English) both give 1234.56:
+        when both separators occur, the last one is the decimal point.  A single
+        comma is a decimal comma ("12,5").  Spaces and no-break spaces used as
+        thousands separators are ignored.  The result is rounded half up to the
+        field's scale and must fit into DECIMAL(18) (currency: DECIMAL(19)).
+        """
         if isinstance(raw, bool):
             raise ValidationError("error.invalid_number")
         if isinstance(raw, float):
@@ -284,6 +313,7 @@ class Field:
         return value
 
     def to_json(self, value):
+        """JSON friendly value: decimals as strings (no rounding by floats), dates in ISO 8601."""
         if value is None:
             return None
         if isinstance(value, decimal.Decimal):
@@ -307,6 +337,7 @@ class Field:
         return str(value)
 
     def as_dict(self) -> dict:
+        """Definition of the field as stored in exports and returned by the API."""
         return {
             "name": self.name,
             "label": self.label,
@@ -326,6 +357,13 @@ class Field:
 
 
 def parse_date(text: str) -> dt.date:
+    """Parse a date: ISO (2026-01-31), Turkish (31.01.2026) or with slashes.
+
+    With slashes the day-first form (31/01/2026, used in Türkiye and the UK)
+    is tried before the US form (01/31/2026); ambiguous values such as
+    03/04/2026 are therefore read as 3 April.  The forms of the program send
+    ISO dates, so this only matters for hand made CSV files.
+    """
     text = text.strip()
     for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y"):
         try:
@@ -339,6 +377,11 @@ def parse_date(text: str) -> dt.date:
 
 
 def parse_datetime(text: str) -> dt.datetime:
+    """Parse a date and time and return it as naive UTC.
+
+    ISO 8601 with an offset or ``Z`` is converted to UTC; values without a
+    time zone are taken as UTC already.  A plain date means midnight.
+    """
     text = text.strip().replace("Z", "+00:00")
     try:
         value = dt.datetime.fromisoformat(text)
@@ -362,6 +405,7 @@ def parse_datetime(text: str) -> dt.datetime:
 
 
 def field_from_row(row: dict) -> Field:
+    """Build a :class:`Field` from a row of the ``erp_fields`` table."""
     return Field(
         id=row.get("id"),
         entity_id=row.get("entity_id"),

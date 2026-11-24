@@ -7,6 +7,7 @@ from ..db.database import utcnow
 
 
 def log(conn: Conn, user: dict | None, action: str, target: str = "", detail: str = "") -> None:
+    """Append an entry; ``user`` is ``None`` for actions of the system or of API keys."""
     conn.insert(
         "erp_audit",
         {
@@ -21,9 +22,11 @@ def log(conn: Conn, user: dict | None, action: str, target: str = "", detail: st
 
 
 def list_entries(conn: Conn, limit: int = 50, offset: int = 0) -> list[dict]:
+    """Newest entries first, one page at a time."""
     sql = f"SELECT * FROM {conn.q('erp_audit')} ORDER BY {conn.q('id')} DESC"
     return conn.all(sql + conn.dialect.limit_sql(limit, offset))
 
 
 def count_entries(conn: Conn) -> int:
+    """Total number of entries (for paging)."""
     return int(conn.scalar(f"SELECT COUNT(*) FROM {conn.q('erp_audit')}"))

@@ -22,6 +22,12 @@ DOCUMENT_EXTENSIONS = {
 
 
 def storage_path(upload_dir: str | Path, key: str) -> Path:
+    """Path of a stored file: ``<upload dir>/<first 2 characters>/<key>``.
+
+    The key must be lower case hex (it is a random token), which rules out
+    path traversal such as ``../``.  The two character sub-directories keep
+    directories small.
+    """
     if not key or not all(c in "0123456789abcdef" for c in key):
         raise ValueError("invalid storage key")
     return Path(upload_dir) / key[:2] / key
@@ -49,6 +55,7 @@ def detect(kind: str, filename: str, head: bytes, declared: str | None) -> str:
 
 
 def safe_name(filename: str) -> str:
+    """File name without directories and characters that are invalid on Windows; at most 255 characters."""
     name = os.path.basename((filename or "").replace("\\", "/")).strip()
     name = "".join(c for c in name if c.isprintable() and c not in '<>:"/\\|?*')
     return (name or "file")[:255]
@@ -56,6 +63,12 @@ def safe_name(filename: str) -> str:
 
 def save_file(conn: Conn, upload_dir: str | Path, kind: str, filename: str, body: bytes,
               declared_mime: str | None, entity: str | None, user_id: int | None) -> dict:
+    """Check and store an upload; returns the new ``erp_files`` row.
+
+    The content is written to a temporary file first and then renamed, so a
+    half written file is never visible.  If the database insert fails, the
+    file is removed again.  ``entity=None`` marks an unattached upload.
+    """
     filename = safe_name(filename)
     mime = detect(kind, filename, body[:64], declared_mime)
     key = secrets.token_hex(16)
@@ -85,10 +98,12 @@ def save_file(conn: Conn, upload_dir: str | Path, kind: str, filename: str, body
 
 
 def get_file(conn: Conn, file_id: int) -> dict | None:
+    """The file row with ``file_id``, or ``None``."""
     return conn.one(f"SELECT * FROM {conn.q('erp_files')} WHERE {conn.q('id')} = ?", [file_id])
 
 
 def get_files(conn: Conn, ids: set[int]) -> dict[int, dict]:
+    """File rows for ``ids`` as ``{id: row}``."""
     if not ids:
         return {}
     ids_list = sorted(ids)
@@ -98,10 +113,12 @@ def get_files(conn: Conn, ids: set[int]) -> dict[int, dict]:
 
 
 def list_files(conn: Conn) -> list[dict]:
+    """All file rows in id order."""
     return conn.all(f"SELECT * FROM {conn.q('erp_files')} ORDER BY {conn.q('id')}")
 
 
 def remove_from_disk(upload_dir: str | Path, rows: list[dict]) -> None:
+    """Delete stored files; files that are already missing are ignored."""
     for row in rows:
         try:
             storage_path(upload_dir, row["storage_key"]).unlink(missing_ok=True)
@@ -115,6 +132,7 @@ def delete_orphans(conn: Conn, upload_dir: str | Path, older_than_hours: int = 2
 
     from . import entities as entities_repo
 
+    # Recent uploads may belong to a form that is still being filled in, so only older ones are removed.
     limit = utcnow() - dt.timedelta(hours=older_than_hours)
     used: set[int] = set()
     for ent in entities_repo.list_entities(conn):

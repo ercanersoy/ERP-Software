@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{# Login form.  data-nodirty: leaving it never asks about unsaved input. #}
 {% block body %}
 <h1>{{ t("login.title") }}</h1>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% end %}

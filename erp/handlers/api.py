@@ -31,7 +31,9 @@ MAX_BATCH = 1000
 
 
 class ApiError(tornado.web.HTTPError):
+    """An API failure answered as JSON: ``{"error": code, "message": ..., "details": ...}``."""
     def __init__(self, status: int, code: str, message: str = "", details: dict | None = None):
+        """``status`` is the HTTP status, ``code`` a stable machine readable error code."""
         super().__init__(status, code.replace("%", ""))
         self.status = status
         self.code = code
@@ -40,6 +42,7 @@ class ApiError(tornado.web.HTTPError):
 
 
 def record_json(ent, record: dict) -> dict:
+    """A record as JSON: field values, times in UTC with ``Z``, creator and API key."""
     out = {"id": record["id"]}
     for f in ent.fields:
         out[f.name] = f.to_json(record.get(f.name))
@@ -51,6 +54,7 @@ def record_json(ent, record: dict) -> dict:
 
 
 def entity_json(ent) -> dict:
+    """Public description of an entity and its fields."""
     return {
         "name": ent.name,
         "label": ent.label,
@@ -64,6 +68,7 @@ def entity_json(ent) -> dict:
 
 
 def errors_json(errors: dict[str, ValidationError]) -> dict[str, str]:
+    """Validation errors as ``{field: code}``, e.g. ``{"celsius": "invalid_number"}``."""
     return {name: err.key.removeprefix("error.") for name, err in errors.items()}
 
 
@@ -73,6 +78,7 @@ class ApiAuth:
     key: dict
 
     async def authenticate_token(self, token: str) -> dict:
+        """Check the API switch and the token; sets ``self.key`` or raises 401/503."""
         state = self.application.settings["erp_state"]
         if not state.installed:
             raise ApiError(503, "not_installed")
@@ -91,6 +97,11 @@ class ApiAuth:
         return key
 
     def check_rate(self) -> None:
+        """Enforce the key's minimum interval between writes (HTTP 429 when too fast).
+
+        The time of the last write is kept in memory per key, so the limit
+        restarts with the server, which is harmless.
+        """
         interval = self.key["min_interval_ms"]
         if not interval:
             return
@@ -106,6 +117,12 @@ class ApiAuth:
         state.api_last_write[self.key["id"]] = now
 
     async def entity(self, name: str, write: bool):
+        """Load an entity for reading or writing with the current key.
+
+        Entities the key may not use at all are reported as unknown (404), so
+        keys can not discover other entities; 403 means the key may use the
+        entity but not in this direction (e.g. a read-only key writing).
+        """
         state = self.application.settings["erp_state"]
         ent = await state.db.run(entities_repo.get_entity, name)
         if ent is None or not apikeys_repo.key_allows(self.key, name, False if not write else True):
@@ -116,28 +133,35 @@ class ApiAuth:
 
 
 class ApiHandler(ApiAuth, tornado.web.RequestHandler):
+    """Base of the REST handlers: token authentication in :meth:`prepare`, JSON responses."""
     def check_xsrf_cookie(self) -> None:  # token based authentication, no cookies
+        """No XSRF check: requests are authorised by API keys, not by cookies."""
         pass
 
     def set_default_headers(self) -> None:
+        """JSON content type; responses are never cached."""
         self.set_header("Content-Type", "application/json; charset=utf-8")
         self.set_header("Cache-Control", "no-store")
         self.set_header("X-Content-Type-Options", "nosniff")
 
     @property
     def state(self):
+        """The shared :class:`erp.app.AppState`."""
         return self.application.settings["erp_state"]
 
     async def prepare(self) -> None:
+        """Read the token from ``Authorization: Bearer`` or ``X-API-Key`` and authenticate it."""
         auth = self.request.headers.get("Authorization", "")
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else self.request.headers.get("X-API-Key", "").strip()
         await self.authenticate_token(token)
 
     def send_json(self, data, status: int = 200) -> None:
+        """Finish the request with ``data`` as JSON."""
         self.set_status(status)
         self.finish(json.dumps(data, default=json_default, ensure_ascii=False))
 
     def send_error_json(self, exc: ApiError) -> None:
+        """Send an :class:`ApiError` with the right status and headers."""
         if exc.status == 401:
             self.set_header("WWW-Authenticate", 'Bearer realm="erp"')
         if exc.status == 429:
@@ -148,12 +172,14 @@ class ApiHandler(ApiAuth, tornado.web.RequestHandler):
         self.send_json(body, exc.status)
 
     def int_arg(self, name: str, default: int) -> int:
+        """Integer query argument; invalid values are a 400 error."""
         try:
             return int(self.get_argument(name, str(default)) or default)
         except ValueError:
             raise ApiError(400, "invalid_parameter", f"{name} must be an integer") from None
 
     def body_json(self):
+        """Parse the JSON body, honouring a ``charset`` in the Content-Type header (e.g. windows-1254)."""
         ctype = self.request.headers.get("Content-Type", "application/json")
         charset = "utf-8"
         if "charset=" in ctype:
@@ -164,6 +190,7 @@ class ApiHandler(ApiAuth, tornado.web.RequestHandler):
             raise ApiError(400, "invalid_json") from None
 
     def write_error(self, status_code: int, **kwargs) -> None:
+        """Every error, also unexpected ones, is answered as JSON."""
         exc = kwargs.get("exc_info", (None, None, None))[1]
         if isinstance(exc, ApiError):
             return self.send_error_json(exc)
@@ -173,13 +200,17 @@ class ApiHandler(ApiAuth, tornado.web.RequestHandler):
 
 
 class PingHandler(ApiHandler):
+    """``GET /api/v1/ping``: test a key."""
     def get(self) -> None:
+        """Report the version, the key's name and permissions and the server time."""
         self.send_json({"ok": True, "version": __version__, "key": self.key["name"], "time": utcnow().isoformat() + "Z",
                         "can_read": self.key["can_read"], "can_write": self.key["can_write"]})
 
 
 class EntitiesHandler(ApiHandler):
+    """``GET /api/v1/entities``: the entities the key may use."""
     async def get(self) -> None:
+        """List the entities the key may read or write, with their fields."""
         ents = await self.state.db.run(entities_repo.list_entities)
         allowed = [e for e in ents if apikeys_repo.key_allows(self.key, e.name, False)
                    or apikeys_repo.key_allows(self.key, e.name, True)]
@@ -187,7 +218,9 @@ class EntitiesHandler(ApiHandler):
 
 
 class EntitySchemaHandler(ApiHandler):
+    """``GET /api/v1/entities/<name>``: one entity with its fields."""
     async def get(self, name: str) -> None:
+        """Describe the entity (404 when the key may not use it)."""
         ent = await self.state.db.run(entities_repo.get_entity, name)
         if ent is None or not (apikeys_repo.key_allows(self.key, name, False) or apikeys_repo.key_allows(self.key, name, True)):
             raise ApiError(404, "not_found")
@@ -198,6 +231,7 @@ class EntityConfigHandler(ApiHandler):
     """Lets a sensor ask how often it should read and send values."""
 
     async def get(self, name: str) -> None:
+        """Reading interval of the entity and minimum write interval of the key."""
         ent = await self.state.db.run(entities_repo.get_entity, name)
         if ent is None or not (apikeys_repo.key_allows(self.key, name, False) or apikeys_repo.key_allows(self.key, name, True)):
             raise ApiError(404, "not_found")
@@ -206,7 +240,14 @@ class EntityConfigHandler(ApiHandler):
 
 
 class RecordsHandler(ApiHandler):
+    """``GET`` lists and ``POST`` creates records of an entity."""
     async def get(self, name: str) -> None:
+        """List records.
+
+        Query arguments: ``limit`` (1-1000), ``offset``, ``since_id`` (records
+        newer than an id, oldest first: ideal for polling), ``order``, ``dir``,
+        ``q`` (search) and ``<field>=<value>`` for exact filters.
+        """
         ent = await self.entity(name, write=False)
         limit = min(max(self.int_arg("limit", 100), 1), 1000)
         offset = min(max(self.int_arg("offset", 0), 0), 2**62)
@@ -238,6 +279,11 @@ class RecordsHandler(ApiHandler):
         self.send_json(out)
 
     async def post(self, name: str) -> None:
+        """Create one record (JSON object) or up to :data:`MAX_BATCH` (JSON array).
+
+        All records are validated before any is stored, and a batch is stored in
+        one transaction: either all records are created or none.
+        """
         ent = await self.entity(name, write=True)
         payload = self.body_json()
         batch = isinstance(payload, list)
@@ -270,7 +316,9 @@ class RecordsHandler(ApiHandler):
 
 
 class RecordHandler(ApiHandler):
+    """Read, replace (PUT), change (PATCH) or delete one record."""
     async def get(self, name: str, record_id: str) -> None:
+        """Return the record."""
         ent = await self.entity(name, write=False)
         record = await self.state.db.run(records_repo.get_record, ent, int(record_id))
         if record is None:
@@ -278,11 +326,13 @@ class RecordHandler(ApiHandler):
         self.send_json(record_json(ent, record))
 
     async def _update(self, name: str, record_id: str, partial: bool) -> None:
+        """Shared code of PUT (all fields) and PATCH (only the given fields)."""
         ent = await self.entity(name, write=True)
         payload = self.body_json()
         if not isinstance(payload, dict):
             raise ApiError(400, "invalid_body")
         self.check_rate()
+        # Unknown keys are refused instead of ignored, so typos in sensor programs are noticed at once.
         unknown = [k for k in payload if ent.field(k) is None and k != "id"]
         values, errors = records_repo.validate(ent, payload, partial=partial)
         if errors or unknown:
@@ -298,12 +348,15 @@ class RecordHandler(ApiHandler):
         self.send_json(record_json(ent, record))
 
     async def put(self, name: str, record_id: str) -> None:
+        """Replace the record: missing fields become empty."""
         await self._update(name, record_id, partial=False)
 
     async def patch(self, name: str, record_id: str) -> None:
+        """Change only the fields contained in the body."""
         await self._update(name, record_id, partial=True)
 
     async def delete(self, name: str, record_id: str) -> None:
+        """Delete the record and its files; answers 204 No Content."""
         ent = await self.entity(name, write=True)
 
         def remove(conn):
@@ -320,7 +373,9 @@ class RecordHandler(ApiHandler):
 
 
 class LatestHandler(ApiHandler):
+    """``GET /api/v1/entities/<name>/latest``: the newest records."""
     async def get(self, name: str) -> None:
+        """Return the ``n`` newest records (default 1) and the reading interval."""
         ent = await self.entity(name, write=False)
         n = min(max(self.int_arg("n", 1), 1), 1000)
         rows = await self.state.db.run(records_repo.list_records, ent, limit=n)
@@ -332,6 +387,7 @@ class FileUploadHandler(ApiHandler):
     """``POST /api/v1/files?kind=image&entity=name`` with multipart field ``file``."""
 
     async def post(self) -> None:
+        """Store the uploaded file; its id can then be used as the value of a file field."""
         kind = self.get_argument("kind", "document")
         entity = self.get_argument("entity", "")
         if kind not in FILE_KINDS:
@@ -351,7 +407,9 @@ class FileUploadHandler(ApiHandler):
 
 
 class FileDownloadHandler(ApiHandler):
+    """``GET /api/v1/files/<id>``: download a file of an entity the key may read."""
     async def get(self, file_id: str) -> None:
+        """Send the file content (unattached uploads are not available through the API)."""
         row = await self.state.db.run(files_repo.get_file, int(file_id))
         if row is None or not row["entity"] or not apikeys_repo.key_allows(self.key, row["entity"], False):
             raise ApiError(404, "not_found")
@@ -379,9 +437,16 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
     ent = None
 
     def check_origin(self, origin: str) -> bool:
+        """Allow connections from any origin: the API key, not a cookie, authorises the client."""
         return True  # authentication uses API keys, not cookies
 
     async def get(self, *args, **kwargs):
+        """Authenticate before the WebSocket handshake.
+
+        The token may also be given as ``?token=`` because browsers can not set
+        headers on WebSocket connections.  Failures are answered with a normal
+        HTTP error instead of an upgrade.
+        """
         auth = self.request.headers.get("Authorization", "")
         token = auth[7:].strip() if auth.lower().startswith("bearer ") else (
             self.request.headers.get("X-API-Key", "") or self.get_argument("token", "")).strip()
@@ -399,6 +464,7 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
         await super().get(*args, **kwargs)
 
     def open(self, name: str) -> None:
+        """Subscribe to new records (keys with read access) and send the ``hello`` message."""
         state = self.application.settings["erp_state"]
         if self.key["can_read"]:
             state.subscribe(name, self)
@@ -406,6 +472,13 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
                                        "can_write": self.key["can_write"], "can_read": self.key["can_read"]}))
 
     async def on_message(self, message) -> None:
+        """Handle a client message.
+
+        ``{"event": "config"}`` or ``{"event": "ping"}`` returns the current
+        reading interval (an administrator may have changed it); anything else is
+        a record or a list of records to store.  Errors are sent back as
+        ``{"event": "error", ...}``; the connection stays open.
+        """
         state = self.application.settings["erp_state"]
         ent = self.ent
         try:
@@ -438,10 +511,12 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
             self.write_message(json.dumps({"event": "error", "error": "invalid", "details": details}))
 
     def on_close(self) -> None:
+        """Stop sending new records to this connection."""
         if self.ent is not None:
             self.application.settings["erp_state"].unsubscribe(self.ent.name, self)
 
     async def push(self, ids: list[int]) -> None:
+        """Send new records to the client (called through :meth:`AppState.publish`)."""
         ent = self.ent
         state = self.application.settings["erp_state"]
         rows = await state.db.run(lambda conn: [records_repo.get_record(conn, ent, i) for i in ids])
@@ -453,5 +528,7 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
 
 
 class NotFoundApiHandler(ApiHandler):
+    """Unknown API paths: JSON 404 instead of an HTML page."""
     async def prepare(self) -> None:
+        """Answer 404 (after authentication, so unknown keys still get 401)."""
         raise ApiError(404, "not_found")

@@ -27,6 +27,7 @@ class EntityHandler(BaseHandler):
     ent: entities_repo.Entity
 
     async def load_entity(self, name: str):
+        """Load the entity and the menus (for the breadcrumb); 404 when unknown, 403 without permission."""
         def load(conn):
             ent = entities_repo.get_entity(conn, name)
             menus = menus_repo.list_menus(conn) if ent else []
@@ -42,10 +43,12 @@ class EntityHandler(BaseHandler):
         return ent
 
     def entity_crumbs(self, *extra: tuple[str, str]) -> list[tuple[str, str]]:
+        """Breadcrumb: main menu > menu path of the entity > entity > ``extra``."""
         path = [(m["title"], f"/menu/{m['id']}") for m in menus_repo.menu_path(self.menus, self.ent.menu_id)]
         return self.crumbs(*path, (self.ent.label, f"/data/{self.ent.name}"), *extra)
 
     async def load_record(self, record_id: int) -> dict:
+        """Load a record; 404 when it is missing or belongs to another dealer."""
         record = await self.db(records_repo.get_record, self.ent, record_id)
         if record is None:
             raise tornado.web.HTTPError(404)
@@ -89,6 +92,8 @@ class EntityHandler(BaseHandler):
                 return {"text": loc.number(value)}
             case "currency":
                 code = f.currency or self.cfg.get("default_currency", "TRY")
+                # Amounts show 2 decimals unless the stored value really uses more (e.g. a unit price of
+                # 0.1234).
                 places = 2 if f.scale >= 2 else f.scale
                 if isinstance(value, decimal.Decimal) and value != value.quantize(decimal.Decimal("0.01")):
                     places = f.scale
@@ -112,7 +117,9 @@ class EntityHandler(BaseHandler):
 
 
 class RecordListHandler(EntityHandler):
+    """Record list with search, sorting and paging (``/data/<entity>``)."""
     async def get(self, name: str) -> None:
+        """Show one page of records plus the actions the user may use."""
         ent = await self.load_entity(name)
         q = self.get_argument("q", "").strip()[:100]
         sort = self.get_argument("sort", "id")
@@ -155,7 +162,9 @@ class RecordListHandler(EntityHandler):
 
 
 class RecordViewHandler(EntityHandler):
+    """Read-only view of one record, including images and videos."""
     async def get(self, name: str, record_id: str) -> None:
+        """Show all fields of the record and its creation/change times."""
         ent = await self.load_entity(name)
         record = await self.load_record(int(record_id))
         refs, files = await self.related([record])
@@ -174,9 +183,17 @@ class RecordViewHandler(EntityHandler):
 
 
 class RecordFormHandler(EntityHandler):
+    """Form for new records (``/new``) and for changing records (``/<id>/edit``)."""
     write_access = True
 
     async def form_fields(self, record: dict | None, raw: dict, errors: dict) -> list[FormField]:
+        """Build the form controls for the entity's fields.
+
+        Each field type gets a suitable HTML control (number with step, date,
+        datetime-local, check box, select, file ...).  Link fields list only
+        records the user may see.  ``raw`` holds submitted input to show again
+        after a validation error, ``errors`` maps fields to errors.
+        """
         ent = self.ent
 
         def load(conn):
@@ -239,6 +256,7 @@ class RecordFormHandler(EntityHandler):
         return out
 
     def input_value(self, f: Field, record: dict | None):
+        """Value for the form control: the default for new records, else the stored value as text."""
         if record is None:
             if f.default_value not in (None, ""):
                 if f.field_type == "boolean":
@@ -269,6 +287,7 @@ class RecordFormHandler(EntityHandler):
         return str(value)
 
     async def show(self, record, raw, errors, error=None) -> None:
+        """Render the form; new records also get the "Save and new" button."""
         ent = self.ent
         title = self.t("data.new_record") if record is None else self.t("data.edit_record")
         url = f"/data/{ent.name}/new" if record is None else f"/data/{ent.name}/{record['id']}/edit"
@@ -282,11 +301,19 @@ class RecordFormHandler(EntityHandler):
                        multipart=any(f.is_file for f in ent.fields), error=error, buttons=buttons)
 
     async def get(self, name: str, record_id: str | None = None) -> None:
+        """Show an empty form or the form of an existing record."""
         await self.load_entity(name)
         record = await self.load_record(int(record_id)) if record_id else None
         await self.show(record, {}, {})
 
     async def post(self, name: str, record_id: str | None = None) -> None:
+        """Validate and save the record.
+
+        Date-times arrive in local time and are converted to UTC.  File fields
+        keep their file unless a new file is uploaded or "remove" is ticked.
+        Uploads are stored first; if saving the record then fails, they are
+        discarded again so no orphans remain.
+        """
         ent = await self.load_entity(name)
         record = await self.load_record(int(record_id)) if record_id else None
         raw: dict = {}
@@ -303,6 +330,7 @@ class RecordFormHandler(EntityHandler):
                     raw[f.name] = text
             else:
                 raw[f.name] = self.get_argument(f.name, "")
+        # Field values are converted and checked first; file fields are handled separately below.
         values, errors = records_repo.validate(ent, raw, partial=False)
         # Files: keep, replace or remove.
         uploads: dict[str, dict] = {}
@@ -363,6 +391,7 @@ class RecordFormHandler(EntityHandler):
         self.redirect(target)
 
     async def _discard(self, rows: list[dict]) -> None:
+        """Delete uploads of a failed save from the database and the disk."""
         if not rows:
             return
 
@@ -375,9 +404,11 @@ class RecordFormHandler(EntityHandler):
 
 
 class RecordDeleteHandler(EntityHandler):
+    """Delete a record after confirmation."""
     write_access = True
 
     async def get(self, name: str, record_id: str) -> None:
+        """Ask for confirmation."""
         ent = await self.load_entity(name)
         record = await self.load_record(int(record_id))
         title = ent.record_title(record)
@@ -388,6 +419,7 @@ class RecordDeleteHandler(EntityHandler):
                                               (self.t("common.delete"), self.request.path)))
 
     async def post(self, name: str, record_id: str) -> None:
+        """Delete the record and its files."""
         ent = await self.load_entity(name)
         record = await self.load_record(int(record_id))
         removed = await self.db(records_repo.delete_record, ent, record["id"])
@@ -401,6 +433,7 @@ class MonitorHandler(EntityHandler):
     """Live view of the newest records, refreshed at the entity's reading interval."""
 
     async def get(self, name: str) -> None:
+        """Live table page; ``?interval=`` overrides the reading interval for this view only."""
         ent = await self.load_entity(name)
         interval = self.int_arg("interval", ent.read_interval_ms, 100, 86_400_000)
         self.render("monitor.html", title=f"{ent.label}: {self.t('data.monitor')}", ent=ent, interval=interval,
@@ -409,7 +442,9 @@ class MonitorHandler(EntityHandler):
 
 
 class LatestJsonHandler(EntityHandler):
+    """JSON for the live monitor: the newest rows already formatted for display."""
     async def get(self, name: str) -> None:
+        """The ``n`` newest records (dealers: their own) as display texts."""
         ent = await self.load_entity(name)
         n = self.int_arg("n", 20, 1, 200)
         rows = await self.db(records_repo.list_records, ent, limit=n, owner_id=ent.owner_filter(self.user))
@@ -425,7 +460,9 @@ class LatestJsonHandler(EntityHandler):
 
 
 class EntityExportHandler(EntityHandler):
+    """Export the records of one entity as CSV, TOML or SQL."""
     def fields(self, values: dict) -> list[FormField]:
+        """Export form; dealers who see only their own records can export CSV only."""
         t = self.t
         formats = [("csv", "CSV")]
         if self.ent.owner_filter(self.user) is None:
@@ -443,12 +480,14 @@ class EntityExportHandler(EntityHandler):
         ]
 
     async def get(self, name: str) -> None:
+        """Show the export form."""
         await self.load_entity(name)
         self.form_page(f"{self.ent.label}: {self.t('data.export')}", self.fields({}),
                        self.entity_crumbs((self.t("data.export"), self.request.path)),
                        submit=self.t("common.download"))
 
     async def post(self, name: str) -> None:
+        """Create and send the export file."""
         ent = await self.load_entity(name)
         fmt = self.get_argument("format", "csv")
         charset = charsets.normalize(self.get_argument("charset", "utf-8"))
@@ -474,9 +513,11 @@ class EntityExportHandler(EntityHandler):
 
 
 class EntityImportHandler(EntityHandler):
+    """Import records from a CSV file."""
     write_access = True
 
     def fields(self) -> list[FormField]:
+        """Import form: file, character set and delimiter."""
         t = self.t
         return [
             FormField("file", t("data.csv_file"), "file", attrs={"accept": ".csv,.txt,text/csv"}, required=True),
@@ -488,6 +529,7 @@ class EntityImportHandler(EntityHandler):
         ]
 
     async def get(self, name: str) -> None:
+        """Show the import form with the expected column names."""
         ent = await self.load_entity(name)
         columns = ", ".join(f.name for f in ent.fields if not f.is_file)
         self.form_page(f"{ent.label}: {self.t('data.import_csv')}", self.fields(),
@@ -496,6 +538,11 @@ class EntityImportHandler(EntityHandler):
                        intro=self.t("data.import_intro", columns=columns or "—"))
 
     async def post(self, name: str) -> None:
+        """Import the rows of the uploaded CSV file.
+
+        Valid rows are stored, invalid rows are reported with their line number
+        (the header is line 1) and the reason; the first 50 errors are listed.
+        """
         ent = await self.load_entity(name)
         upload = (self.request.files.get("file") or [None])[0]
         crumbs = self.entity_crumbs((self.t("data.import_csv"), self.request.path))
@@ -530,6 +577,7 @@ class EntityImportHandler(EntityHandler):
 
 
 def send_download(handler: BaseHandler, data: bytes, filename: str, content_type: str, charset: str) -> None:
+    """Send ``data`` as a file download with the right content type and character set."""
     handler.set_header("Content-Type", f"{content_type}; charset={charsets.http_name(charset)}")
     handler.set_header("Content-Disposition", content_disposition("attachment", filename))
     handler.set_header("Content-Length", str(len(data)))

@@ -11,6 +11,7 @@ META_COLUMNS = ("id", "created_at", "updated_at", "created_by", "updated_by", "a
 
 
 def normalize(ent: Entity, row: dict) -> dict:
+    """Convert a raw database row into Python values of the entity's field types."""
     out = {}
     for key in META_COLUMNS:
         value = row.get(key)
@@ -65,6 +66,12 @@ def apply_defaults(ent: Entity, data: dict) -> dict:
 
 def _where(conn: Conn, ent: Entity, search: str | None, owner_id: int | None, since_id: int | None,
            filters: dict | None = None) -> tuple[str, list]:
+    """WHERE clause and parameters for record lists.
+
+    Combines the owner restriction (dealers), ``since_id`` (new records for
+    sensors), exact ``filters`` (API) and the search text, which is matched
+    against all text, number and date fields and, when numeric, the id.
+    """
     conds: list[str] = []
     params: list = []
     if owner_id is not None:
@@ -100,6 +107,12 @@ def _where(conn: Conn, ent: Entity, search: str | None, owner_id: int | None, si
 def list_records(conn: Conn, ent: Entity, *, search: str | None = None, order: str = "id",
                  desc: bool = True, limit: int | None = 25, offset: int = 0, owner_id: int | None = None,
                  since_id: int | None = None, filters: dict | None = None) -> list[dict]:
+    """One page of records.
+
+    ``order`` must be a system column or a field name, anything else falls
+    back to ``id``.  The id is added as second sort key so pages are stable
+    when many records have the same value.
+    """
     if order not in META_COLUMNS and ent.field(order) is None:
         order = "id"
     where, params = _where(conn, ent, search, owner_id, since_id, filters)
@@ -112,17 +125,27 @@ def list_records(conn: Conn, ent: Entity, *, search: str | None = None, order: s
 
 
 def count_records(conn: Conn, ent: Entity, *, search: str | None = None, owner_id: int | None = None) -> int:
+    """Number of records matching a search (for paging)."""
     where, params = _where(conn, ent, search, owner_id, None)
     return int(conn.scalar(f"SELECT COUNT(*) FROM {conn.q(ent.table)}{where}", params))
 
 
 def get_record(conn: Conn, ent: Entity, record_id: int) -> dict | None:
+    """The record with ``record_id``, or ``None``."""
     row = conn.one(f"SELECT * FROM {conn.q(ent.table)} WHERE {conn.q('id')} = ?", [record_id])
     return normalize(ent, row) if row else None
 
 
 def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | None,
                        user: dict | None) -> dict[str, ValidationError]:
+    """Checks that need the database; returns ``{field: error}``.
+
+    * unique fields: no other record has the same value;
+    * links: the linked record exists and ``user`` may see it (dealers only
+      their own records), so links can not reveal hidden records;
+    * files: the file exists, has the field's kind, is not attached to
+      another entity or record, and dealers may only use their own uploads.
+    """
     from . import entities as entities_repo
     from . import files as files_repo
 
@@ -190,6 +213,7 @@ def _file_used_elsewhere(conn: Conn, ent: Entity, field_name: str, file_id: int,
 
 def create_record(conn: Conn, ent: Entity, values: dict, user: dict | None = None,
                   api_key_id: int | None = None) -> int:
+    """Validate constraints and insert a record; returns the new id.  ``user=None`` for API keys."""
     errors = _check_constraints(conn, ent, values, None, user)
     if errors:
         raise RecordError(errors)
@@ -226,6 +250,7 @@ def update_record(conn: Conn, ent: Entity, record_id: int, values: dict, user: d
 
 
 def delete_record(conn: Conn, ent: Entity, record_id: int) -> list[dict]:
+    """Delete a record; returns the file rows whose files must be deleted from disk."""
     old = get_record(conn, ent, record_id)
     if old is None:
         return []
@@ -234,16 +259,19 @@ def delete_record(conn: Conn, ent: Entity, record_id: int) -> list[dict]:
 
 
 def _claim_files(conn: Conn, ent: Entity, values: dict) -> None:
+    """Mark uploaded files as belonging to the entity (unclaimed uploads are cleaned up later)."""
     for f in ent.fields:
         if f.is_file and values.get(f.name):
             conn.update("erp_files", {"entity": ent.name}, {"id": values[f.name]})
 
 
 def _release_files(conn: Conn, ent: Entity, old: dict, new: dict) -> list[dict]:
+    """Remove file rows that were replaced or removed; returns them so the caller deletes the files."""
     from . import files as files_repo
 
     removed = []
     for f in ent.fields:
+        # Fields missing from ``new`` were not part of the update (PATCH) and keep their file.
         if not f.is_file or f.name not in new:
             continue
         old_id = old.get(f.name)
@@ -256,12 +284,14 @@ def _release_files(conn: Conn, ent: Entity, old: dict, new: dict) -> list[dict]:
 
 
 def reference_options(conn: Conn, ent: Entity, limit: int = 1000) -> list[tuple[int, str]]:
+    """``(id, title)`` pairs for a link selection box, ordered by title."""
     title = ent.title_field_obj
     rows = list_records(conn, ent, order=title.name if title else "id", desc=False, limit=limit)
     return [(r["id"], ent.record_title(r)) for r in rows]
 
 
 def reference_titles(conn: Conn, ent: Entity, ids: set[int]) -> dict[int, str]:
+    """Titles of the linked records ``ids`` (for showing links in lists)."""
     if not ids:
         return {}
     ids_list = sorted(ids)[:1000]
@@ -271,6 +301,8 @@ def reference_titles(conn: Conn, ent: Entity, ids: set[int]) -> dict[int, str]:
 
 
 class RecordError(Exception):
+    """Validation errors of a record: ``errors`` maps field names to :class:`ValidationError`."""
     def __init__(self, errors: dict[str, ValidationError]):
+        """Keep the errors; the message lists the field names."""
         super().__init__(", ".join(errors))
         self.errors = errors

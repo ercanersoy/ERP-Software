@@ -15,13 +15,21 @@ LOCK_SECONDS = 15 * 60
 
 
 class LoginHandler(BaseHandler):
+    """Login form.
+
+    Repeated failures are throttled per client address and user name: after
+    :data:`MAX_FAILURES` wrong passwords the combination is locked for
+    :data:`LOCK_SECONDS`, and every failure is answered after half a second.
+    """
     require_login = False
 
     def show(self, username: str = "", error: str | None = None) -> None:
+        """Render the login form, optionally with an error message."""
         self.render("login.html", title=self.t("login.title"), username=username, error=error,
                     next_url=self.safe_next(), crumbs=[])
 
     def get(self) -> None:
+        """Show the form (``?lang=`` switches the language); logged in users go on to ``next``."""
         lang = self.get_argument("lang", "")
         if lang in LANGUAGES:
             self.set_cookie(LANG_COOKIE, lang, samesite="Lax", expires_days=365)
@@ -32,14 +40,17 @@ class LoginHandler(BaseHandler):
         self.show()
 
     def _throttle_key(self, username: str) -> str:
+        """Key of the failure counter: client address plus user name."""
         return f"{self.request.remote_ip}|{username}"
 
     async def post(self) -> None:
+        """Check the password, start a session and go to ``next``."""
         username = users_repo.normalize_username(self.get_argument("username", ""))
         password = self.get_argument("password", "")
         failures = self.state.login_failures
         key = self._throttle_key(username)
         count, since = failures.get(key, (0, time.monotonic()))
+        # Locked: do not even check the password, so guessing during the lock is useless.
         if count >= MAX_FAILURES and time.monotonic() - since < LOCK_SECONDS:
             return self.show(username, self.t("login.locked", minutes=LOCK_SECONDS // 60))
         user = await self.db(users_repo.authenticate, username, password)
@@ -47,6 +58,7 @@ class LoginHandler(BaseHandler):
             if time.monotonic() - since >= LOCK_SECONDS:
                 count, since = 0, time.monotonic()
             failures[key] = (count + 1, since)
+            # An attacker trying many user names could otherwise fill the memory.
             if len(failures) > 10_000:  # forget old entries so memory stays bounded
                 now = time.monotonic()
                 for k in [k for k, (_, t0) in failures.items() if now - t0 >= LOCK_SECONDS]:
@@ -66,9 +78,11 @@ class LoginHandler(BaseHandler):
 
 
 class LogoutHandler(BaseHandler):
+    """Logout: GET asks for confirmation, POST ends the session."""
     require_login = False
 
     def get(self) -> None:
+        """Ask for confirmation, so a link or prefetch can not log the user out."""
         if not self.user:
             self.redirect("/login")
             return
@@ -77,6 +91,7 @@ class LogoutHandler(BaseHandler):
                     danger=False)
 
     async def post(self) -> None:
+        """Delete the session, write the audit entry and return to the login page."""
         raw = self.get_signed_cookie(SESSION_COOKIE, max_age_days=31)
         if raw:
             await self.db(users_repo.delete_session, raw.decode())
@@ -90,6 +105,7 @@ class AccountHandler(BaseHandler):
     """The user's own preferences: language, name, e-mail and password."""
 
     def fields(self, values: dict, errors: dict) -> list[FormField]:
+        """Form fields; ``values`` holds submitted input, ``errors`` maps fields to error keys."""
         t = self.t
         e = lambda k: t(errors[k]) if k in errors else ""  # noqa: E731
         return [
@@ -111,13 +127,20 @@ class AccountHandler(BaseHandler):
         ]
 
     def show(self, values=None, errors=None, error=None) -> None:
+        """Render the account form."""
         self.form_page(self.t("menu.account"), self.fields(values or {}, errors or {}),
                        self.crumbs((self.t("menu.account"), "/account")), error=error)
 
     def get(self) -> None:
+        """Show the account form."""
         self.show()
 
     async def post(self) -> None:
+        """Save name, e-mail and language; change the password when a new one is given.
+
+        A password change needs the current password, ends all other sessions
+        (see :func:`users.set_password`) and starts a new one for this browser.
+        """
         values = {k: self.get_argument(k, "") for k in ("full_name", "email", "language", "current_password",
                                                        "new_password", "new_password2")}
         errors: dict[str, str] = {}
@@ -158,6 +181,7 @@ class LanguageHandler(BaseHandler):
     require_login = False
 
     async def get(self, code: str) -> None:
+        """Remember the language in a cookie (and in the profile of a logged in user), then go back."""
         if code not in LANGUAGES:
             self.redirect("/")
             return

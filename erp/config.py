@@ -20,6 +20,13 @@ DEFAULT_PATH = Path("instance") / "erp.toml"
 
 @dataclass
 class InstanceConfig:
+    """Contents of ``erp.toml``.
+
+    ``server``: address, port, cookie_secret, max_upload_mb, certfile, keyfile,
+    xheaders; ``database``: dialect, name, host, port, user, password, driver,
+    pool_size; ``storage``: upload_dir.  Relative paths are relative to the
+    directory of the configuration file, not to the working directory.
+    """
     path: Path
     server: dict = field(default_factory=dict)
     database: dict = field(default_factory=dict)
@@ -27,18 +34,22 @@ class InstanceConfig:
 
     @property
     def base_dir(self) -> Path:
+        """Directory of the configuration file; relative paths are resolved against it."""
         return self.path.resolve().parent
 
     def resolve(self, value: str) -> str:
+        """Make ``value`` absolute, relative to :attr:`base_dir`."""
         p = Path(value)
         return str(p if p.is_absolute() else (self.base_dir / p))
 
     @property
     def upload_dir(self) -> str:
+        """Absolute path of the directory that holds uploaded files."""
         return self.resolve(self.storage.get("upload_dir") or "uploads")
 
     @property
     def database_params(self) -> dict:
+        """Connection parameters; the file name of an SQLite database is made absolute."""
         params = dict(self.database)
         if params.get("dialect") == "sqlite" and params.get("name") not in (None, "", ":memory:"):
             params["name"] = self.resolve(params["name"])
@@ -46,16 +57,24 @@ class InstanceConfig:
 
     @property
     def cookie_secret(self) -> str:
+        """Secret used to sign the session, language and flash cookies."""
         return self.server.get("cookie_secret") or ""
 
     @property
     def max_upload_bytes(self) -> int:
+        """Largest accepted request body in bytes (default 256 MB)."""
         return int(self.server.get("max_upload_mb") or 256) * 1024 * 1024
 
     def to_dict(self) -> dict:
+        """The configuration as a dictionary, ready for the TOML writer."""
         return {"server": self.server, "database": self.database, "storage": self.storage}
 
     def save(self) -> None:
+        """Write the file atomically and readable only by its owner (mode 0600).
+
+        The text is first written to ``erp.tmp`` and then renamed, so a crash can
+        never leave a half written configuration behind.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         text = tomlwriter.dumps(
             self.to_dict(),
@@ -73,6 +92,7 @@ class InstanceConfig:
 
 
 def config_path(explicit: str | None = None) -> Path:
+    """Configuration file to use: the ``--config`` option, ``$ERP_CONFIG`` or ``instance/erp.toml``."""
     return Path(explicit or os.environ.get("ERP_CONFIG") or DEFAULT_PATH)
 
 
@@ -91,6 +111,7 @@ def load(path: Path) -> InstanceConfig | None:
 
 
 def new_config(path: Path) -> InstanceConfig:
+    """A fresh configuration with a new random cookie secret (used by the setup wizard)."""
     return InstanceConfig(
         path=path,
         server={"cookie_secret": secrets.token_urlsafe(48), "max_upload_mb": 256},

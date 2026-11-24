@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{#
+  Table screen used for records and all administration lists.
+  columns: [{label, key (sortable), num (right aligned)}]; rows: [{url, cells}].
+  Rows with a url are links (click, tap or Enter) and take part in arrow key
+  navigation (data-nav).  actions become toolbar buttons with shortcut keys;
+  the table scrolls sideways inside .table-wrap on narrow screens.
+#}
 {% block body %}
 <h1>{{ title }}</h1>
 {% if description %}<p class="desc">{{ description }}</p>{% end %}

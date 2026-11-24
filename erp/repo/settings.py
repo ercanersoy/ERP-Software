@@ -17,6 +17,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
 
 
 def get_settings(conn: Conn) -> dict[str, str]:
+    """All settings: the stored values over :data:`DEFAULT_SETTINGS`."""
     settings = dict(DEFAULT_SETTINGS)
     for row in conn.all(f"SELECT * FROM {conn.q('erp_settings')}"):
         settings[row["setting_key"]] = row["setting_value"] or ""
@@ -24,6 +25,7 @@ def get_settings(conn: Conn) -> dict[str, str]:
 
 
 def save_settings(conn: Conn, values: dict[str, str]) -> None:
+    """Insert or update the given settings; other settings are kept."""
     for key, value in values.items():
         value = "" if value is None else str(value)
         n = conn.update("erp_settings", {"setting_value": value}, {"setting_key": key})
@@ -36,6 +38,7 @@ def save_settings(conn: Conn, values: dict[str, str]) -> None:
 
 
 def replace_settings(conn: Conn, values: dict[str, str]) -> None:
+    """Replace all settings at once (configuration restore)."""
     conn.delete("erp_settings", {})
     for key, value in values.items():
         conn.insert("erp_settings", {"setting_key": key, "setting_value": str(value)}, False)

@@ -1,4 +1,10 @@
 {% extends "base.html" %}
+{#
+  Confirmation page for actions that change or delete data (POST only, so
+  links or prefetching can never trigger them).  Variables: message, action,
+  button, danger (red button), confirm_input (text that must be typed,
+  used for deleting data screens and fields).
+#}
 {% block body %}
 <h1>{{ title }}</h1>
 <form method="post" action="{{ action }}" data-main data-nodirty>

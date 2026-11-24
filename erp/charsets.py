@@ -49,6 +49,11 @@ ALIASES = {
 
 
 def normalize(name: str | None, default: str = "utf-8") -> str:
+    """Canonical name of a supported character set, or ``default``.
+
+    Accepts the keys of :data:`CHARSETS`, the :data:`ALIASES` and any name
+    Python knows for one of them ("latin_1" -> "iso-8859-1").
+    """
     key = (name or "").strip().lower().replace("_", "-")
     key = ALIASES.get(key, key)
     if key in CHARSETS:
@@ -64,10 +69,12 @@ def normalize(name: str | None, default: str = "utf-8") -> str:
 
 
 def is_unicode(charset: str) -> bool:
+    """True for the UTF encodings, which can represent every character."""
     return charset.startswith("utf")
 
 
 def http_name(charset: str) -> str:
+    """Name of the character set for the HTTP ``Content-Type`` header (IANA spelling)."""
     return {
         "utf-8-sig": "utf-8",
         "cp437": "IBM437",
@@ -80,16 +87,19 @@ def http_name(charset: str) -> str:
 
 
 def encode(text: str, charset: str, errors: str = "replace") -> bytes:
+    """Encode text; characters missing from the character set become ``?`` by default."""
     return text.encode(charset, errors=errors)
 
 
 def decode(data: bytes, charset: str) -> str:
+    """Decode bytes, dropping a UTF-8 byte order mark; undecodable bytes become U+FFFD."""
     if charset == "utf-8" and data.startswith(codecs.BOM_UTF8):
         data = data[3:]
     return data.decode(charset, errors="replace")
 
 
 def can_encode(char: str, charset: str) -> bool:
+    """True when ``char`` exists in ``charset``."""
     try:
         char.encode(charset)
         return True

@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{#
+  Menu screen: every item has a shortcut key (data-key) and takes part in
+  arrow key navigation; "hint" is a short description under the item.
+#}
 {% block body %}
 <h1>{{ title }}</h1>
 {% if empty %}<p class="notice">{{ empty }}</p>{% end %}

@@ -18,15 +18,24 @@ _ESCAPES = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t", "\n": "\\n", "\f
 
 
 class TomlWriter:
+    """Serialises dictionaries of the backup format as TOML 1.0 text."""
     def __init__(self, charset: str = "utf-8"):
+        """``charset`` decides which characters may appear unescaped in strings."""
         self.charset = charset
         self.unicode = charsets.is_unicode(charset)
 
     # ------------------------------------------------------------------ values
     def key(self, key: str) -> str:
+        """A key: bare when possible (``name``), quoted otherwise (``"Müşteri adı"``)."""
         return key if BARE_KEY.match(key) else self.string(key)
 
     def string(self, text: str) -> str:
+        """A basic (double quoted) TOML string.
+
+        Control characters are always escaped.  Other characters are written as
+        they are when the target character set has them, else as ``\\uXXXX`` or
+        ``\\UXXXXXXXX`` escapes, so even a DOS 857 file keeps every character.
+        """
         out = ['"']
         for ch in text:
             if ch in _ESCAPES:
@@ -45,6 +54,12 @@ class TomlWriter:
         return "".join(out)
 
     def value(self, value) -> str:
+        """Any supported Python value as TOML.
+
+        Decimals are written as strings: TOML floats are binary floating point
+        and would change amounts such as 0.10.  ``None`` values are left out,
+        TOML has no null; readers treat missing keys as NULL.
+        """
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, int):
@@ -76,9 +91,15 @@ class TomlWriter:
     # ------------------------------------------------------------------ tables
     @staticmethod
     def _is_table_array(value) -> bool:
+        """True for a non-empty list of dictionaries, written as ``[[array.of.tables]]``."""
         return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
     def _table(self, lines: list[str], path: list[str], data: dict, header: str | None) -> None:
+        """Append one table to ``lines``.
+
+        TOML requires a table's plain keys before its sub-tables and arrays of
+        tables, hence the three passes over ``data``.
+        """
         scalars = [(k, v) for k, v in data.items()
                    if v is not None and not isinstance(v, dict) and not self._is_table_array(v)]
         tables = [(k, v) for k, v in data.items() if isinstance(v, dict)]
@@ -98,6 +119,7 @@ class TomlWriter:
                 self._table(lines, sub, item, "[[" + ".".join(self.key(p) for p in sub) + "]]")
 
     def dumps(self, data: dict, comments: list[str] | None = None) -> str:
+        """The whole document, preceded by ``# comment`` lines."""
         lines: list[str] = []
         for c in comments or []:
             lines.append("# " + c)
@@ -109,4 +131,5 @@ class TomlWriter:
 
 
 def dumps(data: dict, charset: str = "utf-8", comments: list[str] | None = None) -> str:
+    """Serialise ``data`` as TOML for the given character set (see :class:`TomlWriter`)."""
     return TomlWriter(charset).dumps(data, comments)

@@ -30,6 +30,13 @@ class AppState:
     """Mutable state shared by all handlers of one server process."""
 
     def __init__(self, config_path: Path, setup_token: str | None = None):
+        """Create an empty state; :meth:`load` fills it from the configuration file.
+
+        ``login_failures`` maps "ip|username" to ``(failures, first failure time)``
+        for the login throttle, ``api_last_write`` maps an API key id to the
+        monotonic time of its last write (rate limit), and ``subscribers`` maps an
+        entity name to the WebSocket handlers that want its new records.
+        """
         self.config_path = Path(config_path)
         self.config: config.InstanceConfig | None = None
         self.db: Database | None = None
@@ -41,9 +48,16 @@ class AppState:
 
     @property
     def installed(self) -> bool:
+        """True once a database is connected, i.e. the setup wizard has run."""
         return self.db is not None
 
     def load(self) -> None:
+        """Read the configuration file at start-up.
+
+        Without a file the program stays in setup mode and needs a setup token:
+        the one given to the constructor, ``$ERP_SETUP_TOKEN`` or a random one
+        (printed to the console by :func:`serve`).
+        """
         cfg = config.load(self.config_path)
         if cfg is None:
             self.setup_token = self.setup_token or os.environ.get("ERP_SETUP_TOKEN") or secrets.token_urlsafe(12)
@@ -51,6 +65,13 @@ class AppState:
         self.activate(cfg, migrate=True)
 
     def activate(self, cfg: config.InstanceConfig, migrate: bool = False) -> None:
+        """Connect to the configured database and leave setup mode.
+
+        Called at start-up (with ``migrate=True``, so older installations are
+        brought up to date) and by the setup wizard right after installation, so
+        no restart is needed.  The cookie secret of the running application is
+        replaced by the one of the new configuration.
+        """
         params = cfg.database_params
         db = Database(get_dialect(params.get("dialect", "sqlite")), params, int(params.get("pool_size") or 8))
         if migrate:
@@ -64,21 +85,35 @@ class AppState:
 
     # ---------------------------------------------------------------- live data
     def subscribe(self, entity: str, handler) -> None:
+        """Register a WebSocket ``handler`` for new records of ``entity``."""
         self.subscribers.setdefault(entity, set()).add(handler)
 
     def unsubscribe(self, entity: str, handler) -> None:
+        """Remove a WebSocket ``handler``; unknown handlers are ignored."""
         self.subscribers.get(entity, set()).discard(handler)
 
     def publish(self, entity: str, ids: list[int]) -> None:
+        """Tell every subscriber of ``entity`` about the new record ``ids``.
+
+        Each ``handler.push(ids)`` runs as its own callback on the event loop, so a
+        slow client never delays the request that created the records.
+        """
         for handler in list(self.subscribers.get(entity, ())):
             tornado.ioloop.IOLoop.current().spawn_callback(handler.push, ids)
 
     def close(self) -> None:
+        """Close the database connections (server shutdown)."""
         if self.db is not None:
             self.db.close()
 
 
 def routes() -> list:
+    """URL routes of the application.
+
+    ``NAME`` matches technical entity and field names, ``ID`` numeric ids.
+    The order matters only for ``/api/.*``, the catch-all of the REST API,
+    which must come last.
+    """
     return [
         (r"/setup", setup.SetupHandler),
         (r"/login", auth.LoginHandler),
@@ -145,6 +180,12 @@ def routes() -> list:
 
 
 def make_app(state: AppState, debug: bool = False) -> tornado.web.Application:
+    """Create the Tornado application for ``state``.
+
+    XSRF protection is on for all forms (the REST API switches it off, it uses
+    API keys instead of cookies).  Before installation a temporary random
+    cookie secret is used; :meth:`AppState.activate` replaces it.
+    """
     cookie_secret = state.config.cookie_secret if state.config else secrets.token_urlsafe(48)
     app = tornado.web.Application(
         routes(),
@@ -166,6 +207,7 @@ def make_app(state: AppState, debug: bool = False) -> tornado.web.Application:
 
 
 def parse_args(argv=None) -> argparse.Namespace:
+    """Parse the command line options (see ``python3 -m erp --help``)."""
     p = argparse.ArgumentParser(prog="erp", description=f"{APP_NAME} {__version__}")
     p.add_argument("--config", help="instance configuration file (default: instance/erp.toml or $ERP_CONFIG)")
     p.add_argument("--host", help="address to listen on (default: from configuration or 127.0.0.1)")
@@ -176,6 +218,13 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 async def serve(args: argparse.Namespace) -> None:
+    """Start the HTTP(S) server and run until the process is stopped.
+
+    The listening address and port come from the command line, else from the
+    ``[server]`` table of the configuration, else 127.0.0.1:8888.  HTTPS is used
+    when ``certfile`` and ``keyfile`` are configured.  The maximum request size
+    follows ``max_upload_mb`` so large videos can be uploaded.
+    """
     state = AppState(config.config_path(args.config))
     state.load()
     app = make_app(state, debug=args.debug)
@@ -206,6 +255,7 @@ async def serve(args: argparse.Namespace) -> None:
 
 
 def main(argv=None) -> None:
+    """Console entry point (``erp-software`` / ``python3 -m erp``)."""
     args = parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

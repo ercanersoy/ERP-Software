@@ -28,15 +28,19 @@ from .setup import common_timezones
 
 
 class AdminHandler(BaseHandler):
+    """Base of the administration screens: administrators only (``roles``)."""
     roles = ("admin",)
 
     def admin_crumbs(self, *items):
+        """Breadcrumb: main menu > administration > ``items``."""
         return self.crumbs((self.t("menu.admin"), "/admin"), *items)
 
     def yes_no(self, value) -> str:
+        """"Yes"/"No" for list cells."""
         return self.loc.boolean(bool(value))
 
     def err(self, errors: dict, key: str) -> str:
+        """Translated error message of form field ``key`` (error keys or :class:`ValidationError`)."""
         if key not in errors:
             return ""
         e = errors[key]
@@ -45,7 +49,9 @@ class AdminHandler(BaseHandler):
 
 # ====================================================================== entities
 class EntityListHandler(AdminHandler):
+    """List of all data screen definitions."""
     async def get(self) -> None:
+        """Show the entities with field count, menu, sensor flag and permissions."""
         def load(conn):
             return entities_repo.list_entities(conn), {m["id"]: m for m in menus_repo.list_menus(conn)}
 
@@ -69,7 +75,9 @@ class EntityListHandler(AdminHandler):
 
 
 class EntityDetailHandler(AdminHandler):
+    """One data screen: its fields and the actions on it."""
     async def get(self, name: str) -> None:
+        """Show the fields of the entity in their order."""
         ent = await self.db(entities_repo.get_entity, name)
         if ent is None:
             raise tornado.web.HTTPError(404)
@@ -94,7 +102,9 @@ class EntityDetailHandler(AdminHandler):
 
 
 class EntityFormHandler(AdminHandler):
+    """Create or change a data screen."""
     async def context(self, name: str | None):
+        """Load the entity (``None`` for a new one) and all menus; 404 for unknown names."""
         def load(conn):
             ent = entities_repo.get_entity(conn, name) if name else None
             return ent, menus_repo.list_menus(conn)
@@ -105,6 +115,9 @@ class EntityFormHandler(AdminHandler):
         return ent, menus
 
     def fields(self, ent, menus, values: dict, errors: dict) -> list[FormField]:
+        """Form fields.  The technical name can only be entered for new entities, the title field only for
+        existing ones.
+        """
         t = self.t
         is_new = ent is None
         v = lambda k, d="": values.get(k, d)  # noqa: E731
@@ -140,6 +153,7 @@ class EntityFormHandler(AdminHandler):
         return out
 
     def show(self, ent, menus, values, errors, error=None) -> None:
+        """Render the form with the right title and breadcrumb."""
         t = self.t
         if ent is None:
             crumbs = self.admin_crumbs((t("admin.entities"), "/admin/entities"), (t("entities.new"), "/admin/entities/new"))
@@ -151,6 +165,7 @@ class EntityFormHandler(AdminHandler):
         self.form_page(title, self.fields(ent, menus, values, errors), crumbs, error=error)
 
     async def get(self, name: str | None = None) -> None:
+        """Show the form, filled in for an existing entity."""
         ent, menus = await self.context(name)
         values = {}
         if ent is not None:
@@ -159,6 +174,7 @@ class EntityFormHandler(AdminHandler):
         self.show(ent, menus, values, {})
 
     async def post(self, name: str | None = None) -> None:
+        """Validate and save; a new entity also gets its database table."""
         ent, menus = await self.context(name)
         keys = ("name", "label", "description", "menu_id", "sort_order", "perm_user", "perm_dealer", "title_field",
                 "read_interval_ms", "page_size")
@@ -204,7 +220,9 @@ class EntityFormHandler(AdminHandler):
 
 
 class EntityDeleteHandler(AdminHandler):
+    """Delete a data screen with all its records and files."""
     async def get(self, name: str) -> None:
+        """Ask for confirmation; the technical name must be typed to confirm."""
         ent = await self.db(entities_repo.get_entity, name)
         if ent is None:
             raise tornado.web.HTTPError(404)
@@ -215,6 +233,7 @@ class EntityDeleteHandler(AdminHandler):
                                              (t("common.delete"), self.request.path)))
 
     async def post(self, name: str) -> None:
+        """Delete the entity unless other entities still link to it."""
         ent = await self.db(entities_repo.get_entity, name)
         if ent is None:
             raise tornado.web.HTTPError(404)
@@ -236,7 +255,9 @@ class EntityDeleteHandler(AdminHandler):
 
 # ====================================================================== fields
 class FieldFormHandler(AdminHandler):
+    """Create or change a field of a data screen."""
     async def context(self, name: str, fname: str | None):
+        """Load the entity, the field (``None`` for a new one) and all entities (link targets)."""
         def load(conn):
             return entities_repo.get_entity(conn, name), entities_repo.list_entities(conn)
 
@@ -249,6 +270,7 @@ class FieldFormHandler(AdminHandler):
         return ent, f, all_entities
 
     def fields(self, ent, f, all_entities, values, errors) -> list[FormField]:
+        """Form fields.  Name, type and storage settings are editable for new fields only."""
         t = self.t
         is_new = f is None
         v = lambda k, d="": values.get(k, d)  # noqa: E731
@@ -298,6 +320,7 @@ class FieldFormHandler(AdminHandler):
         return out
 
     def show(self, ent, f, all_entities, values, errors, error=None) -> None:
+        """Render the form; existing fields also get a delete link."""
         t = self.t
         base = self.admin_crumbs((t("admin.entities"), "/admin/entities"), (ent.label, f"/admin/entities/{ent.name}"))
         if f is None:
@@ -312,6 +335,7 @@ class FieldFormHandler(AdminHandler):
         self.form_page(title, self.fields(ent, f, all_entities, values, errors), crumbs, error=error, extra=extra)
 
     async def get(self, name: str, fname: str | None = None) -> None:
+        """Show the form, filled in for an existing field."""
         ent, f, all_entities = await self.context(name, fname)
         values = {}
         if f is not None:
@@ -319,6 +343,7 @@ class FieldFormHandler(AdminHandler):
         self.show(ent, f, all_entities, values, {})
 
     async def post(self, name: str, fname: str | None = None) -> None:
+        """Validate and save; a new field adds a column to the entity's table."""
         ent, f, all_entities = await self.context(name, fname)
         keys = ("name", "label", "field_type", "max_length", "decimal_places", "ref_entity", "currency", "options",
                 "default_value", "help_text", "sort_order")
@@ -368,7 +393,9 @@ class FieldFormHandler(AdminHandler):
 
 
 class FieldDeleteHandler(AdminHandler):
+    """Delete a field together with its column and values."""
     async def context(self, name, fname):
+        """Load entity and field; 404 when either is unknown."""
         ent = await self.db(entities_repo.get_entity, name)
         f = ent.field(fname) if ent else None
         if f is None:
@@ -376,6 +403,7 @@ class FieldDeleteHandler(AdminHandler):
         return ent, f
 
     async def get(self, name: str, fname: str) -> None:
+        """Ask for confirmation; the field name must be typed to confirm."""
         ent, f = await self.context(name, fname)
         t = self.t
         self.render("confirm.html", title=t("fields.delete"), message=t("fields.delete_confirm", name=f.name, entity=ent.label),
@@ -384,6 +412,7 @@ class FieldDeleteHandler(AdminHandler):
                                              (f.label, f"/admin/entities/{ent.name}/fields/{f.name}"), (t("common.delete"), self.request.path)))
 
     async def post(self, name: str, fname: str) -> None:
+        """Drop the field, its column and its files."""
         ent, f = await self.context(name, fname)
         if self.get_argument("confirm", "") != f.name:
             self.flash(self.t("error.confirm_mismatch"), "error")
@@ -398,7 +427,9 @@ class FieldDeleteHandler(AdminHandler):
 
 # ====================================================================== menus
 class MenuListHandler(AdminHandler):
+    """List of the menu tree."""
     async def get(self) -> None:
+        """Show every menu with its full path, sorted like the tree."""
         menus = await self.db(menus_repo.list_menus)
         rows = []
         for m in sorted(menus, key=lambda m: [(x["sort_order"] or 0, x["title"]) for x in menus_repo.menu_path(menus, m["id"])]):
@@ -414,7 +445,9 @@ class MenuListHandler(AdminHandler):
 
 
 class MenuFormHandler(AdminHandler):
+    """Create or change a menu."""
     async def context(self, menu_id):
+        """Load the menu (``None`` for a new one) and all menus."""
         menus = await self.db(menus_repo.list_menus)
         menu = None
         if menu_id:
@@ -424,6 +457,7 @@ class MenuFormHandler(AdminHandler):
         return menu, menus
 
     def show(self, menu, menus, values, error=None):
+        """Render the form.  A menu can not become a child of itself or of its sub-menus."""
         t = self.t
         excluded = set()
         if menu:
@@ -446,12 +480,14 @@ class MenuFormHandler(AdminHandler):
                        error=error, extra=extra)
 
     async def get(self, menu_id: str | None = None) -> None:
+        """Show the form, filled in for an existing menu."""
         menu, menus = await self.context(menu_id)
         values = {"title": menu["title"], "parent_id": str(menu["parent_id"] or ""),
                   "sort_order": str(menu["sort_order"] or 0)} if menu else {}
         self.show(menu, menus, values)
 
     async def post(self, menu_id: str | None = None) -> None:
+        """Validate and save the menu."""
         menu, menus = await self.context(menu_id)
         values = {k: self.get_argument(k, "").strip() for k in ("title", "parent_id", "sort_order")}
         if not values["title"]:
@@ -474,7 +510,9 @@ class MenuFormHandler(AdminHandler):
 
 
 class MenuDeleteHandler(AdminHandler):
+    """Delete a menu; its contents move to the parent menu."""
     async def get(self, menu_id: str) -> None:
+        """Ask for confirmation."""
         menu = await self.db(menus_repo.get_menu, int(menu_id))
         if menu is None:
             raise tornado.web.HTTPError(404)
@@ -485,6 +523,7 @@ class MenuDeleteHandler(AdminHandler):
                                              (t("common.delete"), self.request.path)))
 
     async def post(self, menu_id: str) -> None:
+        """Delete the menu."""
         await self.db(menus_repo.delete_menu, int(menu_id))
         await self.audit("menu_delete", menu_id)
         self.flash(self.t("menus.deleted"))
@@ -493,7 +532,9 @@ class MenuDeleteHandler(AdminHandler):
 
 # ====================================================================== users
 class UserListHandler(AdminHandler):
+    """List of users."""
     async def get(self) -> None:
+        """Show all users with role, state and last login."""
         users = await self.db(users_repo.list_users)
         t = self.t
         rows = [{"url": f"/admin/users/{u['id']}", "cells": [
@@ -508,7 +549,9 @@ class UserListHandler(AdminHandler):
 
 
 class UserFormHandler(AdminHandler):
+    """Create or change a user."""
     async def context(self, user_id):
+        """Load the user (``None`` for a new one); 404 when unknown."""
         if not user_id:
             return None
         u = await self.db(users_repo.get_user, int(user_id))
@@ -517,6 +560,7 @@ class UserFormHandler(AdminHandler):
         return u
 
     def show(self, target, values, errors, error=None):
+        """Render the form; administrators can not delete themselves."""
         t = self.t
         v = lambda k, d="": values.get(k, d)  # noqa: E731
         e = lambda k: t(errors[k]) if k in errors else ""  # noqa: E731
@@ -549,6 +593,7 @@ class UserFormHandler(AdminHandler):
                        error=error, extra=extra)
 
     async def get(self, user_id: str | None = None) -> None:
+        """Show the form, filled in for an existing user."""
         target = await self.context(user_id)
         values = {}
         if target:
@@ -557,6 +602,12 @@ class UserFormHandler(AdminHandler):
         self.show(target, values, {})
 
     async def post(self, user_id: str | None = None) -> None:
+        """Validate and save the user.
+
+        The last active administrator can neither lose the role nor be
+        deactivated.  Deactivating a user ends their sessions immediately; a new
+        password ends them too (see :func:`users.set_password`).
+        """
         target = await self.context(user_id)
         values = {k: self.get_argument(k, "").strip() for k in ("username", "full_name", "email", "role", "language")}
         values["active"] = self.bool_arg("active")
@@ -606,7 +657,9 @@ class UserFormHandler(AdminHandler):
 
 
 class UserDeleteHandler(AdminHandler):
+    """Delete a user (not oneself, not the last administrator)."""
     async def context(self, user_id):
+        """Load the user; 404 when unknown, 403 for one's own account."""
         u = await self.db(users_repo.get_user, int(user_id))
         if u is None:
             raise tornado.web.HTTPError(404)
@@ -615,6 +668,7 @@ class UserDeleteHandler(AdminHandler):
         return u
 
     async def get(self, user_id: str) -> None:
+        """Ask for confirmation."""
         u = await self.context(user_id)
         t = self.t
         self.render("confirm.html", title=t("users.delete"), message=t("users.delete_confirm", username=u["username"]),
@@ -623,6 +677,7 @@ class UserDeleteHandler(AdminHandler):
                                              (t("common.delete"), self.request.path)))
 
     async def post(self, user_id: str) -> None:
+        """Delete the user unless it is the last active administrator."""
         u = await self.context(user_id)
         if u["role"] == "admin" and u["active"] and await self.db(users_repo.count_active_admins) <= 1:
             self.flash(self.t("error.last_admin"), "error")
@@ -636,7 +691,9 @@ class UserDeleteHandler(AdminHandler):
 
 # ====================================================================== API keys
 class ApiKeyListHandler(AdminHandler):
+    """List of API keys (only the prefix of each token is shown)."""
     async def get(self) -> None:
+        """Show the keys with permissions, entities, state and last use."""
         keys = await self.db(apikeys_repo.list_keys)
         t = self.t
         rows = [{"url": f"/admin/apikeys/{k['id']}", "cells": [
@@ -655,7 +712,9 @@ class ApiKeyListHandler(AdminHandler):
 
 
 class ApiKeyFormHandler(AdminHandler):
+    """Create or change an API key."""
     async def context(self, key_id):
+        """Load the key (``None`` for a new one) and all entities."""
         entities = await self.db(entities_repo.list_entities)
         key = None
         if key_id:
@@ -665,6 +724,7 @@ class ApiKeyFormHandler(AdminHandler):
         return key, entities
 
     def show(self, key, entities, values, errors, error=None):
+        """Render the form."""
         t = self.t
         v = lambda k, d="": values.get(k, d)  # noqa: E731
         e = lambda k: t(errors[k]) if k in errors else ""  # noqa: E731
@@ -690,6 +750,7 @@ class ApiKeyFormHandler(AdminHandler):
                        error=error, extra=extra)
 
     async def get(self, key_id: str | None = None) -> None:
+        """Show the form, filled in for an existing key."""
         key, entities = await self.context(key_id)
         values = {}
         if key:
@@ -700,6 +761,11 @@ class ApiKeyFormHandler(AdminHandler):
         self.show(key, entities, values, {})
 
     async def post(self, key_id: str | None = None) -> None:
+        """Validate and save the key.
+
+        A new key's token is shown exactly once on the result page; only its hash
+        is stored.  The expiry date is inclusive (valid until 23:59:59 UTC).
+        """
         key, entities = await self.context(key_id)
         known = {e.name for e in entities}
         values = {
@@ -728,6 +794,7 @@ class ApiKeyFormHandler(AdminHandler):
         except ValueError:
             interval = 0
         expires = None
+        # An empty or invalid date means the key never expires.
         if values["expires_at"]:
             try:
                 expires = dt.datetime.combine(dt.date.fromisoformat(values["expires_at"]), dt.time(23, 59, 59))
@@ -754,7 +821,9 @@ class ApiKeyFormHandler(AdminHandler):
 
 
 class ApiKeyDeleteHandler(AdminHandler):
+    """Delete an API key."""
     async def get(self, key_id: str) -> None:
+        """Ask for confirmation."""
         key = await self.db(apikeys_repo.get_key, int(key_id))
         if key is None:
             raise tornado.web.HTTPError(404)
@@ -765,6 +834,7 @@ class ApiKeyDeleteHandler(AdminHandler):
                                              (t("common.delete"), self.request.path)))
 
     async def post(self, key_id: str) -> None:
+        """Delete the key."""
         await self.db(apikeys_repo.delete_key, int(key_id))
         await self.audit("apikey_delete", key_id)
         self.flash(self.t("apikeys.deleted"))
@@ -773,10 +843,12 @@ class ApiKeyDeleteHandler(AdminHandler):
 
 # ====================================================================== settings
 class SettingsHandler(AdminHandler):
+    """Application wide settings, saved together with one form."""
     KEYS = ("company_name", "default_language", "default_charset", "timezone", "default_currency", "page_size",
             "session_hours", "api_enabled")
 
     def show(self, values, errors=None, error=None):
+        """Render the settings form (current values unless ``values`` overrides them)."""
         t = self.t
         v = lambda k: values.get(k, self.cfg.get(k, ""))  # noqa: E731
         e = lambda k: t((errors or {})[k]) if k in (errors or {}) else ""  # noqa: E731
@@ -801,9 +873,11 @@ class SettingsHandler(AdminHandler):
                        error=error, extra=extra, intro=t("settings.intro"))
 
     def get(self) -> None:
+        """Show the settings."""
         self.show({})
 
     async def post(self) -> None:
+        """Validate and save all settings; select values that are not offered fall back to defaults."""
         values = {k: self.get_argument(k, "").strip() for k in self.KEYS}
         values["api_enabled"] = "1" if self.bool_arg("api_enabled") else "0"
         errors = {}
@@ -829,10 +903,13 @@ class SettingsHandler(AdminHandler):
 
 # ====================================================================== backup
 class BackupHandler(AdminHandler):
+    """Download an export: configuration, data formats, data or full backup."""
     async def get(self, kind: str) -> None:
+        """Show the export form of ``kind``."""
         await self.show(kind)
 
     async def show(self, kind: str) -> None:
+        """Render the export form; data exports let the user choose the entities."""
         t = self.t
         entities = await self.db(entities_repo.list_entities) if kind == "data" else []
         fields = [
@@ -853,6 +930,7 @@ class BackupHandler(AdminHandler):
                        submit=t("common.download"), intro=t(f"backup.kind_{kind}_hint"))
 
     async def post(self, kind: str) -> None:
+        """Create and send the export file."""
         fmt = self.get_argument("format", "toml")
         charset = charsets.normalize(self.get_argument("charset", "utf-8"))
         dialect = self.get_argument("dialect", self.state.db.dialect.name)
@@ -872,7 +950,9 @@ class BackupHandler(AdminHandler):
 
 
 class RestoreHandler(AdminHandler):
+    """Import a TOML export."""
     def fields(self) -> list[FormField]:
+        """Upload form: file, character set, data mode and the confirmation for full backups."""
         t = self.t
         return [
             FormField("file", t("backup.toml_file"), "file", required=True, attrs={"accept": ".toml,text/plain"}),
@@ -885,14 +965,22 @@ class RestoreHandler(AdminHandler):
         ]
 
     def crumbs_(self):
+        """Breadcrumb of the restore screen."""
         t = self.t
         return self.admin_crumbs((t("admin.backup"), "/admin/backup"), (t("backup.restore"), "/admin/restore"))
 
     def get(self) -> None:
+        """Show the restore form."""
         self.form_page(self.t("backup.restore"), self.fields(), self.crumbs_(), multipart=True,
                        submit=self.t("backup.restore_button"), intro=self.t("backup.restore_intro"))
 
     async def post(self) -> None:
+        """Read and apply the uploaded backup.
+
+        A full backup replaces the whole database (including users and
+        sessions), so it needs an explicit confirmation and logs everyone out.
+        Errors are shown on the form; the database is left unchanged then.
+        """
         t = self.t
         upload = (self.request.files.get("file") or [None])[0]
 
@@ -930,7 +1018,9 @@ class RestoreHandler(AdminHandler):
 
 # ====================================================================== audit & system
 class AuditHandler(AdminHandler):
+    """Audit log, newest entries first."""
     async def get(self) -> None:
+        """Show one page (50 entries) of the audit log."""
         total = await self.db(audit_repo.count_entries)
         pages, page, offset = page_window(total, self.int_arg("page", 1), 50)
         entries = await self.db(audit_repo.list_entries, 50, offset)
@@ -946,7 +1036,9 @@ class AuditHandler(AdminHandler):
 
 
 class SystemHandler(AdminHandler):
+    """System information for administrators."""
     async def get(self) -> None:
+        """Show versions, database, paths and record counts."""
         def info(conn):
             counts = {}
             for ent in entities_repo.list_entities(conn):
@@ -972,13 +1064,16 @@ class SystemHandler(AdminHandler):
 
 
 class CleanupHandler(AdminHandler):
+    """Remove uploads that never became part of a record."""
     def get(self) -> None:
+        """Ask for confirmation."""
         t = self.t
         self.render("confirm.html", title=t("system.cleanup"), message=t("system.cleanup_confirm"), action=self.request.path,
                     button=t("system.cleanup"), danger=False,
                     crumbs=self.admin_crumbs((t("admin.system"), "/admin/system"), (t("system.cleanup"), self.request.path)))
 
     async def post(self) -> None:
+        """Delete unattached uploads older than 24 hours."""
         n = await self.db(files_repo.delete_orphans, self.state.config.upload_dir, 24)
         await self.audit("cleanup", "", f"{n} files")
         self.flash(self.t("system.cleanup_done", count=n))

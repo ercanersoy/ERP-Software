@@ -27,16 +27,19 @@ DB_FIELDS = ("db_dialect", "db_host", "db_port", "db_name", "db_user", "db_passw
 
 
 def common_timezones() -> list[str]:
+    """Time zones offered in the forms: UTC plus the ``Area/City`` zones of the system database."""
     zones = sorted(z for z in available_timezones() if "/" in z and not z.startswith(("Etc/", "SystemV/", "posix/", "right/")))
     return ["UTC"] + zones
 
 
 class SetupHandler(BaseHandler):
+    """The installation wizard (``/setup``), see the module description."""
     allow_in_setup = True
     setup_only = True
     require_login = False
 
     def fields(self, values: dict, errors: dict) -> list[FormField]:
+        """Fields of the wizard; ``values`` holds submitted input, ``errors`` maps fields to error keys."""
         t = self.t
         v = lambda k, d="": values.get(k, d)  # noqa: E731
         e = lambda k: t(errors[k]) if k in errors else ""  # noqa: E731
@@ -78,6 +81,7 @@ class SetupHandler(BaseHandler):
         ]
 
     def show(self, values: dict, errors: dict, error: str | None = None, info: str | None = None) -> None:
+        """Render the wizard with an optional error or information text."""
         self.render(
             "form.html", title=self.t("setup.title"), fields=self.fields(values, errors), crumbs=[],
             action="/setup", submit=self.t("setup.install"), multipart=False, error=error,
@@ -86,6 +90,7 @@ class SetupHandler(BaseHandler):
         )
 
     def get(self) -> None:
+        """Show the wizard; ``?lang=`` switches its language."""
         lang = self.get_argument("lang", "")
         if lang in LANGUAGES:
             self.set_cookie(LANG_COOKIE, lang, samesite="Lax")
@@ -93,6 +98,7 @@ class SetupHandler(BaseHandler):
         self.show({}, {})
 
     def _db_params(self, values: dict) -> dict:
+        """Database parameters for the configuration file built from the form values."""
         dialect = values.get("db_dialect") or "sqlite"
         params = {"dialect": dialect, "name": values.get("db_name", "").strip(), "pool_size": 8}
         if dialect != "sqlite":
@@ -112,6 +118,14 @@ class SetupHandler(BaseHandler):
         return params
 
     async def post(self) -> None:
+        """Test the connection or install.
+
+        Steps: check the setup token; connect to the database (the "Test
+        connection" button stops here); validate the administrator account;
+        create or migrate the tables, the first administrator and the settings;
+        write ``erp.toml``; leave setup mode.  An existing installation in the
+        chosen database is kept, and no second administrator is created.
+        """
         names = [f.name for f in self.fields({}, {})]
         values = {n: self.get_argument(n, "") for n in names}
         if values["language"] in LANGUAGES:

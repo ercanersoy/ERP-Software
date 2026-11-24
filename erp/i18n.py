@@ -24,6 +24,7 @@ CURRENCY_SYMBOLS = {"TRY": "₺", "USD": "$", "EUR": "€", "GBP": "£", "JPY": 
 
 
 def _flatten(data: dict, prefix: str = "") -> dict[str, str]:
+    """Turn nested TOML tables into dotted keys: ``{"menu": {"main": ..}}`` -> ``menu.main``."""
     out: dict[str, str] = {}
     for key, value in data.items():
         full = f"{prefix}{key}"
@@ -36,6 +37,7 @@ def _flatten(data: dict, prefix: str = "") -> dict[str, str]:
 
 @lru_cache(maxsize=None)
 def _messages(code: str) -> dict[str, str]:
+    """All texts of one language as a flat dictionary (read once and cached)."""
     path = LOCALE_DIR / f"{code}.toml"
     if not path.exists():
         return {}
@@ -44,6 +46,11 @@ def _messages(code: str) -> dict[str, str]:
 
 
 def normalize_language(code: str | None, default: str = "tr-TR") -> str:
+    """Map a language tag to a supported interface language.
+
+    "tr", "tr_TR" and "TR-tr" give ``tr-TR``; British-like English variants
+    give ``en-GB``; any other English gives ``en-US``; anything else ``default``.
+    """
     if not code:
         return default
     code = code.strip().replace("_", "-")
@@ -61,6 +68,7 @@ def normalize_language(code: str | None, default: str = "tr-TR") -> str:
 
 
 def from_accept_language(header: str | None, default: str) -> str:
+    """First supported language of a browser's ``Accept-Language`` header, else ``default``."""
     if not header:
         return default
     for part in header.split(","):
@@ -73,7 +81,13 @@ def from_accept_language(header: str | None, default: str) -> str:
 
 
 class Locale:
+    """One interface language plus the configured time zone.
+
+    Provides translated texts (:meth:`t`) and locale specific formatting of
+    numbers, amounts, dates and times.
+    """
     def __init__(self, code: str, timezone: str = "UTC"):
+        """Load the texts of ``code`` and set separators and date/time formats of the language."""
         self.code = code if code in LANGUAGES else "en-US"
         self.messages = _messages(self.code)
         self.fallback = _messages(FALLBACK.get(self.code, "en-US")) if self.code != "en-US" else {}
@@ -89,13 +103,20 @@ class Locale:
             self.date_fmt, self.time_fmt = "%d/%m/%Y", "%H:%M:%S"
         else:
             self.decimal_sep, self.group_sep = ".", ","
+            # en-US: month first and the 12-hour clock with AM/PM.
             self.date_fmt, self.time_fmt = "%m/%d/%Y", "%I:%M:%S %p"
 
     @property
     def html_lang(self) -> str:
+        """Value for ``<html lang>``."""
         return self.code
 
     def t(self, key: str, **params) -> str:
+        """Translated text for ``key`` with ``{placeholders}`` filled from ``params``.
+
+        Missing texts fall back to the parent language (en-GB -> en-US), then to
+        en-US, then to the key itself, so a missing translation never breaks a page.
+        """
         text = self.messages.get(key) or self.fallback.get(key) or _messages("en-US").get(key) or key
         if params:
             try:
@@ -108,6 +129,12 @@ class Locale:
 
     # ---------------------------------------------------------------- formats
     def number(self, value, places: int | None = None) -> str:
+        """Format a number with the language's separators: 1.234,56 (tr-TR) or 1,234.56.
+
+        Floats show up to six decimals without trailing zeros, integers none, and
+        decimals as many as they have unless ``places`` is given.  The separators
+        are swapped through a NUL placeholder so they can not mix up.
+        """
         if value is None or value == "":
             return ""
         if isinstance(value, float) and places is None:
@@ -122,6 +149,10 @@ class Locale:
         return text.replace(",", "\x00").replace(".", self.decimal_sep).replace("\x00", self.group_sep)
 
     def currency(self, value, code: str | None, places: int = 2) -> str:
+        """Format an amount: "1.234,56 ₺" in Turkish, "₺1,234.56" / "-£5.00" in English.
+
+        Currencies without a known symbol are shown with their ISO code.
+        """
         if value is None or value == "":
             return ""
         code = (code or "").upper()
@@ -136,6 +167,7 @@ class Locale:
         return f"{symbol}{text}"
 
     def date(self, value) -> str:
+        """Format a date (or the local date of a UTC date-time)."""
         if value is None or value == "":
             return ""
         if isinstance(value, dt.datetime):
@@ -143,11 +175,13 @@ class Locale:
         return value.strftime(self.date_fmt) if isinstance(value, dt.date) else str(value)
 
     def localtime(self, value: dt.datetime) -> dt.datetime:
+        """Convert a naive UTC date-time to the configured time zone."""
         if value.tzinfo is None:
             value = value.replace(tzinfo=dt.UTC)
         return value.astimezone(self.tz)
 
     def datetime(self, value) -> str:
+        """Format a UTC date-time in the configured time zone."""
         if value is None or value == "":
             return ""
         if not isinstance(value, dt.datetime):
@@ -156,6 +190,7 @@ class Locale:
         return local.strftime(f"{self.date_fmt} {self.time_fmt}")
 
     def boolean(self, value) -> str:
+        """"Yes"/"No" in the interface language."""
         if value is None:
             return ""
         return self.t("common.yes") if value else self.t("common.no")
@@ -167,6 +202,7 @@ class Locale:
         return self.localtime(value).replace(tzinfo=None).isoformat(timespec="seconds")
 
     def from_local_input(self, text: str) -> dt.datetime | None:
+        """Read an ``<input type=datetime-local>`` value (local time) back as naive UTC."""
         if not text:
             return None
         value = dt.datetime.fromisoformat(text)
@@ -177,4 +213,5 @@ class Locale:
 
 @lru_cache(maxsize=64)
 def get_locale(code: str, timezone: str = "UTC") -> Locale:
+    """Cached :class:`Locale` for a language and time zone."""
     return Locale(code, timezone)

@@ -6,16 +6,19 @@ from ..db import Conn
 
 
 def list_menus(conn: Conn) -> list[dict]:
+    """All menus ordered by sort order and title (the tree is built by the callers)."""
     return conn.all(
         f"SELECT * FROM {conn.q('erp_menus')} ORDER BY {conn.q('sort_order')}, {conn.q('title')}"
     )
 
 
 def get_menu(conn: Conn, menu_id: int) -> dict | None:
+    """The menu with ``menu_id``, or ``None``."""
     return conn.one(f"SELECT * FROM {conn.q('erp_menus')} WHERE {conn.q('id')} = ?", [menu_id])
 
 
 def save_menu(conn: Conn, menu_id: int | None, title: str, parent_id: int | None, sort_order: int) -> int:
+    """Create (``menu_id=None``) or update a menu; returns its id."""
     values = {"title": title, "parent_id": parent_id, "sort_order": sort_order}
     if menu_id:
         conn.update("erp_menus", values, {"id": menu_id})
@@ -24,6 +27,7 @@ def save_menu(conn: Conn, menu_id: int | None, title: str, parent_id: int | None
 
 
 def descendants(menus: list[dict], menu_id: int) -> set[int]:
+    """Ids of all sub-menus below ``menu_id``, at any depth (a menu can not be moved below them)."""
     result: set[int] = set()
     stack = [menu_id]
     while stack:
@@ -41,6 +45,7 @@ def delete_menu(conn: Conn, menu_id: int) -> None:
     if menu is None:
         return
     parent = menu["parent_id"]
+    # Sub-menus and data screens of the deleted menu move one level up instead of disappearing.
     conn.update("erp_menus", {"parent_id": parent}, {"parent_id": menu_id})
     conn.update("erp_entities", {"menu_id": parent}, {"menu_id": menu_id})
     conn.delete("erp_menus", {"id": menu_id})
@@ -51,6 +56,7 @@ def menu_path(menus: list[dict], menu_id: int | None) -> list[dict]:
     by_id = {m["id"]: m for m in menus}
     path: list[dict] = []
     seen: set[int] = set()
+    # ``seen`` guards against loops in damaged data (a menu that is its own ancestor).
     while menu_id and menu_id in by_id and menu_id not in seen:
         seen.add(menu_id)
         path.append(by_id[menu_id])

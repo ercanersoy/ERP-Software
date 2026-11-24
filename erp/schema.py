@@ -149,10 +149,12 @@ SYSTEM_TABLE_MAP = {t.name: t for t in SYSTEM_TABLES}
 
 
 def data_table_name(entity_name: str) -> str:
+    """Database table of an entity: ``customers`` is stored in ``d_customers``."""
     return DATA_TABLE_PREFIX + entity_name
 
 
 def is_installed(conn: Conn) -> bool:
+    """True when the database already holds an ERP-Software installation (a schema version)."""
     if not conn.table_exists("erp_meta"):
         return False
     return conn.scalar(
@@ -161,6 +163,11 @@ def is_installed(conn: Conn) -> bool:
 
 
 def create_system_tables(conn: Conn) -> None:
+    """Create every system table that does not exist yet.
+
+    Existing tables are left alone, so this is safe on an existing database
+    and is the first step of every migration.
+    """
     for table in SYSTEM_TABLES:
         if conn.table_exists(table.name):
             continue

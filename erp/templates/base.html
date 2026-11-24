@@ -1,3 +1,10 @@
+{#
+  Page frame shared by all screens: header with user and language links,
+  breadcrumb (with a back button for touch screens), flash message, the
+  page body block, the keyboard hint footer and the shortcut overlay (?/F1).
+  data-back on <body> is the target of Esc (see static/app.js), data-unsaved
+  the question asked before unsaved form input is thrown away.
+#}
 <!DOCTYPE html>
 <html lang="{{ loc.code }}">
 <head>

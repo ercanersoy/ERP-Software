@@ -16,11 +16,19 @@ from ..schema import SYSTEM_COLUMNS, data_table_name
 
 PERM_USER = ("write", "read", "none")
 PERM_DEALER = ("none", "read", "own")
+# Names that would clash with URL paths such as /data/new or the API.
 RESERVED_ENTITY_NAMES = {"new", "api", "admin", "files"}
 
 
 @dataclass(slots=True)
 class Entity:
+    """A data screen defined by an administrator.
+
+    ``perm_user``/``perm_dealer`` decide what users and dealers may do (see
+    :data:`PERM_USER`, :data:`PERM_DEALER`), ``title_field`` names the field
+    that represents a record in links, and sensor entities have a live monitor
+    refreshed every ``read_interval_ms`` milliseconds.
+    """
     id: int | None
     name: str
     label: str
@@ -37,9 +45,11 @@ class Entity:
 
     @property
     def table(self) -> str:
+        """Database table holding the records (``d_<name>``)."""
         return data_table_name(self.name)
 
     def field(self, name: str) -> Field | None:
+        """The field called ``name``, or ``None``."""
         for f in self.fields:
             if f.name == name:
                 return f
@@ -47,11 +57,14 @@ class Entity:
 
     @property
     def list_fields(self) -> list[Field]:
+        """Fields shown as list columns; without a choice the first five fields."""
         shown = [f for f in self.fields if f.show_in_list]
         return shown or self.fields[:5]
 
     @property
     def title_field_obj(self) -> Field | None:
+        """Field that names a record: the configured one, else the first text-like field, else the first field.
+        """
         if self.title_field:
             f = self.field(self.title_field)
             if f:
@@ -62,6 +75,7 @@ class Entity:
         return self.fields[0] if self.fields else None
 
     def record_title(self, record: dict) -> str:
+        """Text representing ``record`` in links and breadcrumbs, e.g. the customer's name, else ``#id``."""
         f = self.title_field_obj
         if f is not None and record.get(f.name) not in (None, ""):
             return str(record[f.name])
@@ -69,6 +83,7 @@ class Entity:
 
     # -- permissions ---------------------------------------------------------
     def can_read(self, user: dict) -> bool:
+        """May ``user`` open this data screen?  Administrators always may."""
         match user["role"]:
             case "admin":
                 return True
@@ -79,6 +94,7 @@ class Entity:
         return False
 
     def can_write(self, user: dict) -> bool:
+        """May ``user`` create, change and delete records here?"""
         match user["role"]:
             case "admin":
                 return True
@@ -95,6 +111,7 @@ class Entity:
         return None
 
     def table_def(self) -> Table:
+        """Table definition: the system columns followed by one column per field."""
         cols = [
             Column("id", "pk"),
             Column("created_at", "datetime"),
@@ -107,6 +124,7 @@ class Entity:
         return Table(self.table, cols, [(f"ix_{self.table}_created", ["created_at"], False)])
 
     def as_dict(self, with_fields: bool = True) -> dict:
+        """Definition as stored in exports (optionally without the fields)."""
         d = {
             "name": self.name,
             "label": self.label,
@@ -126,6 +144,7 @@ class Entity:
 
 
 def _entity_from_row(row: dict) -> Entity:
+    """Build an :class:`Entity` (without fields) from a row of ``erp_entities``."""
     return Entity(
         id=row["id"],
         name=row["name"],
@@ -143,6 +162,7 @@ def _entity_from_row(row: dict) -> Entity:
 
 
 def list_entities(conn: Conn) -> list[Entity]:
+    """All entities with their fields, loaded with two queries."""
     rows = conn.all(
         f"SELECT * FROM {conn.q('erp_entities')} ORDER BY {conn.q('sort_order')}, {conn.q('label')}"
     )
@@ -158,6 +178,7 @@ def list_entities(conn: Conn) -> list[Entity]:
 
 
 def get_entity(conn: Conn, name: str) -> Entity | None:
+    """The entity called ``name`` with its fields, or ``None``."""
     row = conn.one(f"SELECT * FROM {conn.q('erp_entities')} WHERE {conn.q('name')} = ?", [name])
     if row is None:
         return None
@@ -174,11 +195,13 @@ def get_entity(conn: Conn, name: str) -> Entity | None:
 
 
 def get_entity_by_id(conn: Conn, entity_id: int) -> Entity | None:
+    """The entity with ``entity_id`` with its fields, or ``None``."""
     name = conn.scalar(f"SELECT {conn.q('name')} FROM {conn.q('erp_entities')} WHERE {conn.q('id')} = ?", [entity_id])
     return get_entity(conn, name) if name else None
 
 
 def validate_entity(ent: Entity, is_new: bool) -> dict[str, str]:
+    """Check an entity definition; returns ``{form field: error key}`` (empty when valid)."""
     errors: dict[str, str] = {}
     if is_new:
         if not FIELD_NAME_RE.match(ent.name or "") or ent.name in RESERVED_ENTITY_NAMES:
@@ -197,6 +220,7 @@ def validate_entity(ent: Entity, is_new: bool) -> dict[str, str]:
 
 
 def _entity_values(ent: Entity) -> dict:
+    """Column values of ``erp_entities`` that may change after creation."""
     return {
         "label": ent.label.strip(),
         "description": ent.description or "",
@@ -240,6 +264,7 @@ def create_entity(conn: Conn, ent: Entity, create_fields: bool = False) -> int:
 
 
 def update_entity(conn: Conn, ent: Entity) -> None:
+    """Save changed settings of an entity (its name and table never change)."""
     errors = validate_entity(ent, is_new=False)
     if errors:
         raise ValidationError(next(iter(errors.values())))
@@ -266,6 +291,7 @@ def delete_entity(conn: Conn, ent: Entity) -> list[dict]:
     conn.delete("erp_files", {"entity": ent.name})
     conn.delete("erp_fields", {"entity_id": ent.id})
     conn.delete("erp_entities", {"id": ent.id})
+    # Only links of the entity to itself can be left here (others were refused above).
     conn.update("erp_fields", {"ref_entity": None}, {"ref_entity": ent.name})
     conn.execute(conn.dialect.drop_table_sql(ent.table)).close()
     return files
@@ -273,6 +299,11 @@ def delete_entity(conn: Conn, ent: Entity) -> list[dict]:
 
 # ---------------------------------------------------------------- fields
 def _validate_field(f: Field, ent: Entity, is_new: bool) -> None:
+    """Check a field definition; raises :class:`ValidationError`.
+
+    Name, type and storage settings are only checked for new fields because
+    they can not change later.  A default value must be valid for the type.
+    """
     if is_new:
         if not FIELD_NAME_RE.match(f.name or "") or f.name in SYSTEM_COLUMNS or f.name == "new":
             raise ValidationError("error.invalid_identifier")
@@ -298,6 +329,7 @@ def _validate_field(f: Field, ent: Entity, is_new: bool) -> None:
 
 
 def _field_values(f: Field) -> dict:
+    """Column values of ``erp_fields``; settings that do not apply to the type are stored as NULL."""
     return {
         "label": f.label.strip(),
         "required": bool(f.required),
@@ -315,6 +347,11 @@ def _field_values(f: Field) -> dict:
 
 
 def add_field(conn: Conn, ent: Entity, f: Field) -> int:
+    """Add a field: a new column in the entity's table plus a row in ``erp_fields``.
+
+    New fields are appended at the end (next multiple of 10) unless a sort
+    order is given.  Existing records get NULL in the new column.
+    """
     if f.field_type == "text" and not f.max_length:
         f.max_length = 255
     ent.fields.append(f)
@@ -334,6 +371,7 @@ def add_field(conn: Conn, ent: Entity, f: Field) -> int:
 
 
 def update_field(conn: Conn, ent: Entity, f: Field) -> None:
+    """Save changed settings of a field; type, name and storage settings stay as they are."""
     _validate_field(f, ent, is_new=False)
     values = _field_values(f)
     # Storage relevant properties can not change after creation.
@@ -343,6 +381,11 @@ def update_field(conn: Conn, ent: Entity, f: Field) -> None:
 
 
 def delete_field(conn: Conn, ent: Entity, f: Field) -> list[dict]:
+    """Drop a field and its column; returns the file rows whose files must be deleted from disk.
+
+    For file fields the attached files are removed as well.  If the field was
+    the entity's title field, the entity falls back to its default title.
+    """
     files: list[dict] = []
     if f.is_file:
         ids = [r[f.name] for r in conn.all(

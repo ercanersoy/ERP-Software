@@ -12,11 +12,13 @@ from ..repo import entities as entities_repo
 from ..repo import menus as menus_repo
 from .base import BaseHandler
 
+# Up to 33 items per menu can have a key; further items are reachable with the arrow keys.
 MENU_KEYS = "123456789abcdfghijklmopqrstuvwxyz"  # no "e" and "n": used as shortcuts elsewhere
 DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs"
 
 
 def numbered(items: list[dict]) -> list[dict]:
+    """Give menu items their shortcut keys 1-9, then letters (``e`` and ``n`` are left out)."""
     for i, item in enumerate(items):
         item["key"] = MENU_KEYS[i] if i < len(MENU_KEYS) else ""
     return items
@@ -40,7 +42,14 @@ def visible_tree(menus: list[dict], entities, user: dict) -> tuple[set[int], lis
 
 
 class MenuHandler(BaseHandler):
+    """Main menu (``/``) and user defined menu groups (``/menu/<id>``)."""
     async def get(self, menu_id: str | None = None) -> None:
+        """List the sub-menus and data screens of a menu the user may open.
+
+        The main menu also offers administration (administrators only), the
+        account, the help and logout.  Data screens whose menu no longer exists
+        are shown in the main menu, so nothing becomes unreachable.
+        """
         def load(conn):
             return menus_repo.list_menus(conn), entities_repo.list_entities(conn)
 
@@ -79,9 +88,11 @@ class MenuHandler(BaseHandler):
 
 
 class AdminMenuHandler(BaseHandler):
+    """Administration menu."""
     roles = ("admin",)
 
     def get(self) -> None:
+        """List the administration screens."""
         t = self.t
         items = [
             {"label": t("admin.entities"), "url": "/admin/entities", "hint": t("admin.entities_hint")},
@@ -98,9 +109,11 @@ class AdminMenuHandler(BaseHandler):
 
 
 class BackupMenuHandler(BaseHandler):
+    """Menu of the export kinds and the restore screen."""
     roles = ("admin",)
 
     def get(self) -> None:
+        """List the export kinds and the restore screen."""
         t = self.t
         items = [
             {"label": t("backup.kind_config"), "url": "/admin/backup/config", "hint": t("backup.kind_config_hint")},
@@ -123,6 +136,7 @@ _INLINE = [
 
 
 def _inline(text: str) -> str:
+    """Inline Markdown (code, bold, links); the text is HTML escaped first."""
     text = html.escape(text, quote=False)
     for pattern, repl in _INLINE:
         text = pattern.sub(repl, text)
@@ -203,9 +217,11 @@ def markdown_to_html(source: str) -> str:
 
 
 class HelpHandler(BaseHandler):
+    """In-app help: the Markdown files of ``docs/<language>/`` rendered as HTML."""
     require_login = False
 
     def get(self, page: str | None = None) -> None:
+        """Render one documentation page plus the list of all pages of the language."""
         page = page or "README"
         if not re.match(r"^[A-Za-z0-9_-]+$", page):
             raise tornado.web.HTTPError(404)

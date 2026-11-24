@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+{#
+  Live monitor of a sensor data screen.  static/app.js loads data-src every
+  data-interval milliseconds and rebuilds the table body; the interval can be
+  changed on the page and "p" pauses.
+#}
 {% block body %}
 <h1>{{ title }}</h1>
 <div class="toolbar monitor-controls">

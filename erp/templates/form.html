@@ -1,4 +1,12 @@
 {% extends "base.html" %}
+{#
+  Generic form.  "fields" is a list of handlers.base.FormField; each type
+  (text, number, select, checkbox, checkboxes, textarea, file, static,
+  hidden ...) becomes a row with label, control, unit suffix, error and help.
+  data-main marks the form submitted by Ctrl+S and watched for unsaved
+  changes.  "buttons" adds extra submit buttons (e.g. "Save and new"),
+  "extra" is trusted HTML built by the handler (e.g. a delete link).
+#}
 {% block body %}
 <h1>{{ title }}</h1>
 {% if intro %}<p class="intro">{{ intro }}</p>{% end %}
