@@ -538,7 +538,9 @@ def restore_full(conn: Conn, doc: dict, upload_dir: str | None = None) -> dict:
 
     for key, value in (doc.get("meta") or {}).items():
         conn.insert("erp_meta", {"meta_key": key, "meta_value": str(value)}, False)
-    if not conn.scalar(f"SELECT COUNT(*) FROM {conn.q('erp_meta')}"):
+    # The tables are re-created in the current layout, whatever version the
+    # backup was made with, so the current schema version is recorded.
+    if conn.update("erp_meta", {"meta_value": str(SCHEMA_VERSION)}, {"meta_key": "schema_version"}) == 0:
         conn.insert("erp_meta", {"meta_key": "schema_version", "meta_value": str(SCHEMA_VERSION)}, False)
     settings_repo.replace_settings(conn, {k: str(v) for k, v in (doc.get("settings") or {}).items()})
     _insert_explicit(conn, "erp_users", [_system_row("erp_users", u) for u in doc.get("users", [])])
