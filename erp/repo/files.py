@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 import os
+import re
 import secrets
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ..db import Conn
 from ..db.database import utcnow
 from ..fieldtypes import FIELD_TYPES, ValidationError, sniff_image, sniff_video
 
+MIME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$")
 DOCUMENT_EXTENSIONS = {
     ext.strip() for ext in FIELD_TYPES["document"].accept.split(",")
 }
@@ -50,6 +52,10 @@ def detect(kind: str, filename: str, head: bytes, declared: str | None) -> str:
         case "document":
             if ext not in DOCUMENT_EXTENSIONS:
                 raise ValidationError("error.invalid_document")
+            # The browser's declared type is used only when it looks like a
+            # real MIME type and fits the column (VARCHAR(100)).
+            if declared and (len(declared) > 100 or not MIME_RE.match(declared)):
+                declared = None
             return mimetypes.guess_type(filename)[0] or declared or "application/octet-stream"
     raise ValidationError("error.invalid_value")
 

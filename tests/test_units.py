@@ -106,3 +106,43 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", html)
         self.assertIn('<a href="/help/API">API</a>', html)
         self.assertIn("<ul><li>a</li>", html.replace("\n", ""))
+
+
+class MigrationTests(unittest.TestCase):
+    def test_sqlite_decimal_columns_become_exact(self):
+        import decimal as dec
+
+        from erp import schema
+        from erp.db import Database, get_dialect
+        from erp.repo import entities as entities_repo
+        from erp.fieldtypes import Field
+
+        db = Database(get_dialect("sqlite"), {"name": ":memory:"}, pool_size=1)
+        db.run_sync(schema.install_schema)
+        ent = entities_repo.Entity(None, "money", "Money")
+        db.run_sync(entities_repo.create_entity, ent)
+        db.run_sync(entities_repo.add_field, ent, Field(None, None, "amount", "Amount", "currency"))
+
+        def make_old_style(conn):
+            # what schema version 1 created: DECIMAL with NUMERIC affinity
+            conn.execute('ALTER TABLE "d_money" DROP COLUMN "amount"').close()
+            conn.execute('ALTER TABLE "d_money" ADD COLUMN "amount" DECIMAL(19,4)').close()
+            conn.execute('INSERT INTO "d_money" ("amount") VALUES (12.5)').close()
+            conn.update("erp_meta", {"meta_value": "1"}, {"meta_key": "schema_version"})
+
+        db.run_sync(make_old_style)
+        db.run_sync(schema.migrate)
+        db.run_sync(schema.migrate)  # idempotent
+
+        def check(conn):
+            kind = conn.scalar("SELECT type FROM pragma_table_info('d_money') WHERE name = 'amount'")
+            conn.execute('INSERT INTO "d_money" ("amount") VALUES (?)', [dec.Decimal("123456789012345.6789")]).close()
+            values = [r["amount"] for r in conn.all('SELECT "amount" FROM "d_money" ORDER BY "id"')]
+            version = conn.scalar("SELECT meta_value FROM erp_meta WHERE meta_key = 'schema_version'")
+            return kind, values, version
+
+        kind, values, version = db.run_sync(check)
+        db.close()
+        self.assertIn("TEXT", kind)
+        self.assertEqual(values, [dec.Decimal("12.5000"), dec.Decimal("123456789012345.6789")])
+        self.assertEqual(version, str(schema.SCHEMA_VERSION))

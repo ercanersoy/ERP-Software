@@ -316,6 +316,9 @@ class RecordFormHandler(EntityHandler):
         """
         ent = await self.load_entity(name)
         record = await self.load_record(int(record_id)) if record_id else None
+        if not ent.fields:
+            # Nothing to enter: do not create empty records.
+            return await self.show(record, {}, {})
         raw: dict = {}
         for f in ent.fields:
             if f.is_file:

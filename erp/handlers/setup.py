@@ -160,9 +160,22 @@ class SetupHandler(BaseHandler):
             db.close()
             return self.show(values, errors, error=self.t("setup.connection_failed", error=str(exc)))
 
+        # PostgreSQL databases should use the UTF8 encoding: in SQL_ASCII ones the
+        # server treats text as bytes and case insensitive searches for letters
+        # such as Ç, Ğ, İ, Ö, Ş, Ü do not work.  The wizard warns about it.
+        encoding = ""
+        if cfg.database["dialect"] == "postgresql":
+            try:
+                encoding = str(await asyncio.get_running_loop().run_in_executor(
+                    None, db.run_sync, lambda conn: conn.scalar("SHOW server_encoding"))).upper()
+            except Exception:  # noqa: BLE001 - only used for a warning
+                encoding = ""
         if self.get_argument("action", "") == "test":
             db.close()
-            return self.show(values, errors, info=self.t("setup.connection_ok", version=version))
+            info = self.t("setup.connection_ok", version=version)
+            if encoding not in ("", "UTF8"):
+                info += " " + self.t("setup.pg_encoding_warning", encoding=encoding)
+            return self.show(values, errors, info=info)
 
         username = users_repo.normalize_username(values["admin_username"])
         if not users_repo.valid_username(username):

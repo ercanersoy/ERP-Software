@@ -130,7 +130,8 @@ class EntityFormHandler(AdminHandler):
         else:
             out.append(FormField("name", t("entities.name"), "static", ent.name))
         out += [
-            FormField("label", t("entities.label"), "text", v("label"), required=True, error=self.err(errors, "label")),
+            FormField("label", t("entities.label"), "text", v("label"), required=True, error=self.err(errors, "label"),
+                      attrs={"maxlength": str(entities_repo.LABEL_MAX)}),
             FormField("description", t("entities.description"), "textarea", v("description")),
             FormField("menu_id", t("entities.menu"), "select", v("menu_id"), options=menu_options),
             FormField("sort_order", t("entities.sort_order"), "number", v("sort_order", "0")),
@@ -197,7 +198,8 @@ class EntityFormHandler(AdminHandler):
             sort_order=to_int(values["sort_order"], 0),
             perm_user=values["perm_user"],
             perm_dealer=values["perm_dealer"],
-            title_field=values["title_field"] or None if ent else None,
+            # Only a field of this entity can be the title field (the column is VARCHAR(50)).
+            title_field=values["title_field"] if ent and ent.field(values["title_field"]) else None,
             is_sensor=values["is_sensor"],
             read_interval_ms=to_int(values["read_interval_ms"], 0),
             page_size=to_int(values["page_size"]),
@@ -279,7 +281,8 @@ class FieldFormHandler(AdminHandler):
             out += [
                 FormField("name", t("fields.name"), "text", v("name"), required=True, help=t("fields.name_help"),
                           error=self.err(errors, "name"), attrs={"pattern": "[a-z][a-z0-9_]{0,49}", "maxlength": "50", "autocapitalize": "none", "autocorrect": "off", "spellcheck": "false"}),
-                FormField("label", t("fields.label"), "text", v("label"), required=True, error=self.err(errors, "label")),
+                FormField("label", t("fields.label"), "text", v("label"), required=True, error=self.err(errors, "label"),
+                          attrs={"maxlength": str(entities_repo.LABEL_MAX)}),
                 FormField("field_type", t("fields.type"), "select", v("field_type", "text"),
                           options=[(k, t(f"type.{k}")) for k in FIELD_TYPES], help=t("fields.type_help")),
                 FormField("max_length", t("fields.max_length"), "number", v("max_length", "255"),
@@ -292,7 +295,8 @@ class FieldFormHandler(AdminHandler):
         else:
             out += [
                 FormField("name", t("fields.name"), "static", f.name),
-                FormField("label", t("fields.label"), "text", v("label"), required=True, error=self.err(errors, "label")),
+                FormField("label", t("fields.label"), "text", v("label"), required=True, error=self.err(errors, "label"),
+                          attrs={"maxlength": str(entities_repo.LABEL_MAX)}),
                 FormField("field_type", t("fields.type"), "static", t(f"type.{f.field_type}")),
             ]
             if f.field_type == "text":
@@ -313,8 +317,10 @@ class FieldFormHandler(AdminHandler):
             FormField("is_unique", t("fields.is_unique"), "checkbox", v("is_unique", False)),
             FormField("show_in_list", t("fields.show_in_list"), "checkbox", v("show_in_list", True)),
             FormField("default_value", t("fields.default_value"), "text", v("default_value"),
-                      help=t("fields.default_value_help"), error=self.err(errors, "default_value")),
-            FormField("help_text", t("fields.help_text"), "text", v("help_text"), attrs={"maxlength": "500"}),
+                      help=t("fields.default_value_help"), error=self.err(errors, "default_value"),
+                      attrs={"maxlength": str(entities_repo.DEFAULT_MAX)}),
+            FormField("help_text", t("fields.help_text"), "text", v("help_text"), error=self.err(errors, "help_text"),
+                      attrs={"maxlength": str(entities_repo.HELP_MAX)}),
             FormField("sort_order", t("fields.sort_order"), "number", v("sort_order", "")),
         ]
         return out
@@ -384,9 +390,12 @@ class FieldFormHandler(AdminHandler):
                 await self.db(entities_repo.update_field, ent, target)
                 await self.audit("field_update", f"{ent.name}.{target.name}")
         except ValidationError as exc:
-            key = {"error.invalid_identifier": "name", "error.duplicate_name": "name", "error.required": "label",
-                   "error.options_required": "options", "error.reference_required": "ref_entity",
-                   "error.invalid_length": "max_length", "error.invalid_value": "name"}.get(exc.key, "default_value")
+            # Mark the control the error belongs to: given by the error itself
+            # (``field``) or derived from the kind of error.
+            key = exc.params.get("field") or {
+                "error.invalid_identifier": "name", "error.duplicate_name": "name", "error.required": "label",
+                "error.options_required": "options", "error.reference_required": "ref_entity",
+                "error.invalid_length": "max_length", "error.invalid_value": "name"}.get(exc.key, "default_value")
             return self.show(ent, f, all_entities, values, {key: exc}, self.t(exc.key, **exc.params))
         self.flash(self.t("common.saved"))
         self.redirect(f"/admin/entities/{ent.name}")
@@ -524,6 +533,8 @@ class MenuDeleteHandler(AdminHandler):
 
     async def post(self, menu_id: str) -> None:
         """Delete the menu."""
+        if await self.db(menus_repo.get_menu, int(menu_id)) is None:
+            raise tornado.web.HTTPError(404)
         await self.db(menus_repo.delete_menu, int(menu_id))
         await self.audit("menu_delete", menu_id)
         self.flash(self.t("menus.deleted"))
@@ -835,6 +846,8 @@ class ApiKeyDeleteHandler(AdminHandler):
 
     async def post(self, key_id: str) -> None:
         """Delete the key."""
+        if await self.db(apikeys_repo.get_key, int(key_id)) is None:
+            raise tornado.web.HTTPError(404)
         await self.db(apikeys_repo.delete_key, int(key_id))
         await self.audit("apikey_delete", key_id)
         self.flash(self.t("apikeys.deleted"))
@@ -1042,7 +1055,8 @@ class SystemHandler(AdminHandler):
         def info(conn):
             counts = {}
             for ent in entities_repo.list_entities(conn):
-                counts[ent.label] = conn.scalar(f"SELECT COUNT(*) FROM {conn.q(ent.table)}")
+                # keyed by label and name: two entities may have the same label
+                counts[f"{ent.label} ({ent.name})"] = conn.scalar(f"SELECT COUNT(*) FROM {conn.q(ent.table)}")
             return counts, len(files_repo.list_files(conn))
 
         counts, files = await self.db(info)

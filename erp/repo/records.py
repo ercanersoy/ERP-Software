@@ -81,6 +81,9 @@ def _where(conn: Conn, ent: Entity, search: str | None, owner_id: int | None, si
         conds.append(f"{conn.q('id')} > ?")
         params.append(since_id)
     for name, value in (filters or {}).items():
+        if value is None:  # an empty filter value means "no value"; "= NULL" never matches
+            conds.append(f"{conn.q(name)} IS NULL")
+            continue
         conds.append(f"{conn.q(name)} = ?")
         params.append(value)
     if search:
@@ -117,7 +120,11 @@ def list_records(conn: Conn, ent: Entity, *, search: str | None = None, order: s
         order = "id"
     where, params = _where(conn, ent, search, owner_id, since_id, filters)
     direction = "DESC" if desc else "ASC"
-    order_sql = f" ORDER BY {conn.q(order)} {direction}"
+    order_expr = conn.q(order)
+    order_field = ent.field(order)
+    if order_field is not None and order_field.type.column_kind == "decimal":
+        order_expr = conn.dialect.numeric_order_sql(order_expr)
+    order_sql = f" ORDER BY {order_expr} {direction}"
     if order != "id":
         order_sql += f", {conn.q('id')} {direction}"
     sql = f"SELECT * FROM {conn.q(ent.table)}{where}{order_sql}{conn.dialect.limit_sql(limit, offset)}"

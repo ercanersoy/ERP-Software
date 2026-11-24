@@ -17,6 +17,8 @@ def content_disposition(kind: str, filename: str) -> str:
     ``filename`` is an ASCII fallback for old clients, ``filename*`` the full
     UTF-8 name (RFC 6266 / RFC 5987), so "Sözleşme.pdf" keeps its letters.
     """
+    # Control characters (possible in names from restored backups) are not allowed in headers.
+    filename = "".join(c for c in filename if c.isprintable()) or "file"
     ascii_name = filename.encode("ascii", "replace").decode().replace('"', "'").replace("?", "_")
     quoted = urllib.parse.quote(filename, safe="")
     return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"

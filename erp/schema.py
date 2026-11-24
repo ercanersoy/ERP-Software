@@ -6,7 +6,11 @@ from .db import Column as C
 from .db import Conn, Table
 from .db.database import utcnow
 
-SCHEMA_VERSION = 1
+#: Version of the database layout.  History:
+#: 1 - first release
+#: 2 - SQLite only: decimal and currency columns store exact text (see
+#:     erp.db.dialects.SQLiteDialect.type_sql); :func:`migrate` converts them.
+SCHEMA_VERSION = 2
 DATA_TABLE_PREFIX = "d_"
 
 #: Columns every user defined (data) table has.  Field names may not reuse them.
@@ -191,4 +195,41 @@ def migrate(conn: Conn) -> None:
     )
     if current is None:
         install_schema(conn)
-    # Future migrations go here: ``if int(current) < 2: ...``
+        return
+    version = int(current)
+    if version < 2:
+        _sqlite_exact_decimals(conn)
+    # Future migrations go here: ``if version < 3: ...``
+    if version < SCHEMA_VERSION:
+        conn.update("erp_meta", {"meta_value": str(SCHEMA_VERSION)}, {"meta_key": "schema_version"})
+
+
+def _sqlite_exact_decimals(conn: Conn) -> None:
+    """Schema version 2: rebuild SQLite decimal columns with TEXT affinity.
+
+    Older SQLite installations declared decimal and currency columns as plain
+    ``DECIMAL``, whose NUMERIC affinity keeps only about 15 significant digits.
+    Each such column is renamed, re-created with the exact text type and filled
+    with the values written as fixed point text, then the old column is dropped.
+    Digits that were already lost can not come back, but no further ones are.
+    The function is idempotent: columns that already have the new type are
+    skipped, so it is safe after restoring an old backup too.
+    """
+    if conn.dialect.name != "sqlite":
+        return
+    from .repo import entities as entities_repo  # imported here: the repo modules import this module
+
+    for ent in entities_repo.list_entities(conn):
+        if not conn.table_exists(ent.table):
+            continue
+        declared = {r["name"]: (r["type"] or "").upper() for r in conn.all(f"PRAGMA table_info({conn.q(ent.table)})")}
+        for f in ent.fields:
+            if f.type.column_kind != "decimal" or "TEXT" in declared.get(f.name, "TEXT"):
+                continue
+            table, col, old = conn.q(ent.table), conn.q(f.name), conn.q(f.name + "__old")
+            conn.execute(f"ALTER TABLE {table} RENAME COLUMN {col} TO {old}").close()
+            conn.execute(conn.dialect.add_column_sql(ent.table, f.column())).close()
+            for row in conn.all(f"SELECT {conn.q('id')}, {old} AS v FROM {table} WHERE {old} IS NOT NULL"):
+                value = f.normalize(row["v"])  # Decimal quantized to the field's scale
+                conn.update(ent.table, {f.name: value}, {"id": row["id"]})
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN {old}").close()

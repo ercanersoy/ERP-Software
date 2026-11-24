@@ -318,3 +318,75 @@ class RegressionTests(WebTestCase):
         self.post("/data/temps/new", {"celsius": "20"})
         self.io_loop.run_sync(lambda: None)
         self.assertEqual(seen, [1])
+
+
+class LimitTests(WebTestCase):
+    """Values that SQLite accepts but PostgreSQL, MySQL and SQL Server reject.
+
+    Run these with ERP_TEST_DB pointing to such a database too: before the
+    fixes they ended in HTTP 500 there ("value too long", "out of range").
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.install()
+        self.login()
+
+    def test_long_definition_texts_are_refused(self):
+        long = "x" * 300
+        r = self.post("/admin/entities/new", {"name": "e1", "label": long, "description": "", "menu_id": "",
+                                              "sort_order": "0", "perm_user": "write", "perm_dealer": "none",
+                                              "read_interval_ms": "5000", "page_size": ""})
+        self.assertEqual(r.code, 200)
+        self.assertIn("Too long", self.text(r))
+        self.create_entity("e2", "E2")
+        for extra in ({"label": long}, {"help_text": "y" * 600}, {"default_value": "z" * 300, "max_length": "4000"},
+                      {"field_type": "choice", "options": "ok\n" + long}, {"field_type": "currency", "currency": "EURO"}):
+            data = {"name": "f1", "label": "F1", "field_type": "text", "max_length": "255", "decimal_places": "",
+                    "ref_entity": "", "currency": "TRY", "options": "", "default_value": "", "help_text": "",
+                    "sort_order": ""}
+            data.update(extra)
+            r = self.post("/admin/entities/e2/fields/new", data)
+            self.assertEqual(r.code, 200, (extra.keys(), self.text(r)[:200]))
+        r = self.post("/admin/entities/e2/edit", {"label": "E2", "description": "", "menu_id": "", "sort_order": "0",
+                                                  "perm_user": "write", "perm_dealer": "none", "read_interval_ms": "5000",
+                                                  "page_size": "", "title_field": "t" * 80})
+        self.assertEqual(r.code, 302)  # an unknown title field is ignored, not stored
+
+    def test_huge_sort_orders_are_limited(self):
+        self.create_entity("e3", "E3", sort_order="99999999999999999999")
+        self.add_field("e3", "f", "text", sort_order="99999999999999999999")
+        r = self.post("/admin/menus/new", {"title": "M", "parent_id": "", "sort_order": "99999999999999999999"})
+        self.assertEqual(r.code, 302)
+        self.assertEqual(self.get("/admin/entities/e3").code, 200)
+
+    def test_decimals_keep_all_digits_and_sort_numerically(self):
+        self.create_entity("money", "Money")
+        self.add_field("money", "amount", "currency")
+        for value in ("123456789012345.6789", "9", "100"):
+            self.assertEqual(self.post("/data/money/new", {"amount": value}).code, 302)
+        token = self.create_api_key("k")
+        r = self.fetch("/api/v1/entities/money/records/1", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(json.loads(r.body)["amount"], "123456789012345.6789")
+        r = self.fetch("/api/v1/entities/money/records?order=amount&dir=asc", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual([x["amount"] for x in json.loads(r.body)["records"]],
+                         ["9.0000", "100.0000", "123456789012345.6789"])
+
+    def test_empty_api_filter_matches_empty_values(self):
+        self.create_entity("notes", "Notes")
+        self.add_field("notes", "tag", "text")
+        self.post("/data/notes/new", {"tag": ""})
+        self.post("/data/notes/new", {"tag": "a"})
+        token = self.create_api_key("k")
+        r = self.fetch("/api/v1/entities/notes/records?tag=", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual([x["id"] for x in json.loads(r.body)["records"]], [1])
+
+    def test_next_with_control_characters_is_ignored(self):
+        self.post("/logout")
+        r = self.post("/login", {"username": "admin", "password": "secret123", "next": "/\t/evil.example"})
+        self.assertEqual(r.code, 302)
+        self.assertEqual(r.headers["Location"], "/")
+
+    def test_deleting_missing_items_is_not_found(self):
+        self.assertEqual(self.post("/admin/menus/42/delete").code, 404)
+        self.assertEqual(self.post("/admin/apikeys/42/delete").code, 404)

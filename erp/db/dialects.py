@@ -220,6 +220,10 @@ class Dialect:
         """Prepare a search text for :meth:`like_sql` (``%`` and ``_`` match literally)."""
         return "%" + self.escape_like(fold_text(text.strip())) + "%"
 
+    def numeric_order_sql(self, expr: str) -> str:
+        """ORDER BY expression for a decimal column (unchanged where decimals are numeric)."""
+        return expr
+
     def cast_text_sql(self, expr: str) -> str:
         """Cast a number or date to text, so it can be searched with LIKE."""
         return f"CAST({expr} AS VARCHAR(255))"
@@ -317,7 +321,18 @@ class SQLiteDialect(Dialect):
                 return "REAL"
             case "datetime":
                 return "DATETIME"
+            case "decimal":
+                # A plain DECIMAL column has NUMERIC affinity: SQLite would turn
+                # "123456789012345.6789" into a binary float and keep only about
+                # 15 significant digits.  "TEXT" in the declared type gives TEXT
+                # affinity, so amounts are stored exactly; the first word
+                # "DECIMAL" still selects the Decimal converter when reading.
+                return f"DECIMAL TEXT({col.precision or 18},{col.scale if col.scale is not None else 2})"
         return super().type_sql(col)
+
+    def numeric_order_sql(self, expr: str) -> str:
+        """Decimals are stored as text: sort by their numeric value, not alphabetically."""
+        return f"CAST({expr} AS REAL)"
 
     def table_exists_sql(self) -> str:
         """Look the table up in ``sqlite_master``."""
@@ -634,7 +649,13 @@ class PostgreSQLDialect(Dialect):
     drivers = ("psycopg", "psycopg2")
 
     def connect(self, cfg: dict):
-        """Connect to the configured database."""
+        """Connect to the configured database, always talking UTF-8.
+
+        ``client_encoding`` matters for databases created with the SQL_ASCII
+        encoding (the default of ``initdb`` under the C/POSIX locale): without
+        it the drivers return text columns as ``bytes``, so for example no
+        password hash would ever match and nobody could log in.
+        """
         mod = self.load_driver(cfg.get("driver") or None)
         return mod.connect(
             host=cfg.get("host") or "localhost",
@@ -642,6 +663,7 @@ class PostgreSQLDialect(Dialect):
             user=cfg.get("user") or "",
             password=cfg.get("password") or "",
             dbname=cfg.get("name") or "",
+            client_encoding="UTF8",
         )
 
     def init_connection(self, raw) -> None:
@@ -671,6 +693,18 @@ class PostgreSQLDialect(Dialect):
         """PostgreSQL casts to TEXT."""
         return f"CAST({expr} AS TEXT)"
 
+    def fold_sql(self, expr: str) -> str:
+        """Locale independent version of :func:`fold_text`.
+
+        PostgreSQL's LOWER() follows the database's LC_CTYPE: in databases
+        created with the C or POSIX locale (common on servers and in
+        containers) it only lowers ASCII, so "ÇAĞRI" would stay "ÇaĞri" and
+        Turkish searches would miss.  TRANSLATE() maps the letters itself,
+        including İ and ı to i, before LOWER() handles A-Z.
+        """
+        upper, lower = _FOLD_FROM, _FOLD_TO
+        return f"LOWER(TRANSLATE({expr}, {self.string_literal(upper)}, {self.string_literal(lower)}))"
+
     def literal(self, value) -> str:
         """PostgreSQL specific literal for binary data (bytea)."""
         if isinstance(value, (bytes, bytearray, memoryview)):
@@ -686,6 +720,23 @@ class PostgreSQLDialect(Dialect):
         return ["COMMIT"]
 
 
+def _fold_table() -> tuple[str, str]:
+    """Upper case letters of the Latin, Greek and Cyrillic blocks and their lower case form.
+
+    Built from Python's Unicode data, so the database side folds exactly like
+    :func:`fold_text`.  ``İ`` and ``ı`` both become ``i``, as in :func:`fold_text`.
+    """
+    src, dst = ["İ", "ı"], ["i", "i"]
+    for code in list(range(0x00C0, 0x0250)) + list(range(0x0370, 0x0530)):
+        ch = chr(code)
+        low = ch.lower()
+        if ch in ("İ", "ı") or low == ch or len(low) != 1:
+            continue
+        src.append(ch)
+        dst.append(low)
+    return "".join(src), "".join(dst)
+
+
 def fold_text(value):
     """Case folding for searches that treats Turkish dotted/dotless i alike."""
     if value is None:
@@ -696,6 +747,8 @@ def fold_text(value):
         text = text.replace(ch, "i")
     return text.lower()
 
+
+_FOLD_FROM, _FOLD_TO = _fold_table()
 
 _SQLITE_REGISTERED = False
 

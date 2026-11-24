@@ -360,6 +360,10 @@ def _entity_from_dict(d: dict) -> entities_repo.Entity:
 def _merge_entities(conn: Conn, items: list[dict], menu_ids: set[int]) -> dict[str, int]:
     """Create missing entities and fields, update labels of existing ones."""
     stats = {"entities_created": 0, "fields_created": 0, "entities_updated": 0}
+    # New entities first: a new link field of an existing entity may point to an
+    # entity that is created by this same import (add_field checks the target).
+    known = {e.name for e in entities_repo.list_entities(conn)}
+    items = sorted(items, key=lambda item: str(item.get("name", "")) in known)
     for item in items:
         new = _entity_from_dict(item)
         if new.menu_id not in menu_ids:
@@ -512,6 +516,17 @@ def restore_full(conn: Conn, doc: dict, upload_dir: str | None = None) -> dict:
         errors = entities_repo.validate_entity(ent, is_new=True)
         if errors:
             raise BackupError(next(iter(errors.values())))
+        # Field definitions too: an invalid field type or name would only fail
+        # while the tables are being re-created.  On MySQL/MariaDB every DROP
+        # and CREATE TABLE commits at once, so the old data would already be
+        # gone by then and could not be rolled back.
+        for f in ent.fields:
+            try:
+                entities_repo._validate_field(f, ent, is_new=True)
+            except ValidationError as exc:
+                raise BackupError(exc.key, **exc.params) from None
+    if len({e.name for e in new_entities}) != len(new_entities):
+        raise BackupError("error.duplicate_name")
     if not any(isinstance(u, dict) and u.get("role") == "admin" for u in doc.get("users", [])):
         raise BackupError("error.backup_without_admin")
 

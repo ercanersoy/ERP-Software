@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..db import Conn
+from . import clamp_order
 
 
 def list_menus(conn: Conn) -> list[dict]:
@@ -19,7 +20,7 @@ def get_menu(conn: Conn, menu_id: int) -> dict | None:
 
 def save_menu(conn: Conn, menu_id: int | None, title: str, parent_id: int | None, sort_order: int) -> int:
     """Create (``menu_id=None``) or update a menu; returns its id."""
-    values = {"title": title, "parent_id": parent_id, "sort_order": sort_order}
+    values = {"title": title, "parent_id": parent_id, "sort_order": clamp_order(sort_order)}
     if menu_id:
         conn.update("erp_menus", values, {"id": menu_id})
         return menu_id

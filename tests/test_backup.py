@@ -145,6 +145,25 @@ class BackupTests(WebTestCase):
         r = self.post("/admin/restore", {"charset": "", "mode": "append"}, files={"file": ("s.toml", schema, "text/plain")})
         self.assertIn("fields_created: 1", self.text(r))
 
+    def test_import_new_link_target_after_existing_entity(self):
+        # "customers" exists; the import adds a link field to it that points to
+        # "zones", which the same import creates (and which is listed later).
+        doc = (b'[backup]\nformat = "erp-software"\nkind = "schema"\n'
+               b'[[entities]]\nname = "customers"\nlabel = "C"\n'
+               b'[[entities.fields]]\nname = "zone"\nlabel = "Zone"\nfield_type = "reference"\nref_entity = "zones"\n'
+               b'[[entities]]\nname = "zones"\nlabel = "Zones"\n')
+        r = self.post("/admin/restore", {"charset": "", "mode": "append"}, files={"file": ("s.toml", doc, "text/plain")})
+        self.assertIn("entities_created: 1", self.text(r))
+        self.assertIn("fields_created: 1", self.text(r))
+
+    def test_full_restore_with_invalid_field_changes_nothing(self):
+        full = self.download("full", "toml").decode()
+        broken = full.replace('field_type = "boolean"', 'field_type = "no-such-type"', 1)
+        r = self.post("/admin/restore", {"charset": "", "confirm_full": "1"},
+                      files={"file": ("f.toml", broken.encode(), "text/plain")})
+        self.assertIn("Invalid value", self.text(r))
+        self.assertIn("Işık Ğıda", self.text(self.get("/data/customers")))
+
     def test_invalid_import(self):
         r = self.post("/admin/restore", {"charset": ""}, files={"file": ("x.toml", b"a = [", "text/plain")})
         self.assertIn("not valid TOML", self.text(r))

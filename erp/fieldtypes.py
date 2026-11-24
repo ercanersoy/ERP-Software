@@ -177,7 +177,8 @@ class Field:
         match self.field_type:
             case "text" | "longtext":
                 value = str(raw)
-                limit = self.max_length if self.field_type == "text" else None
+                # Text columns are VARCHAR(max_length), 255 when no length was stored.
+                limit = (self.max_length or 255) if self.field_type == "text" else None
                 if limit and len(value) > limit:
                     raise ValidationError("error.too_long", max=limit)
                 return value

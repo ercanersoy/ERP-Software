@@ -11,12 +11,15 @@ from dataclasses import dataclass, field
 
 from ..db import Column, Conn, Table
 from ..db.database import utcnow
-from ..fieldtypes import FIELD_NAME_RE, FIELD_TYPES, Field, ValidationError, field_from_row
+from ..fieldtypes import CURRENCIES, FIELD_NAME_RE, FIELD_TYPES, Field, ValidationError, field_from_row
 from ..schema import SYSTEM_COLUMNS, data_table_name
+from . import clamp_order
 
 PERM_USER = ("write", "read", "none")
 PERM_DEALER = ("none", "read", "own")
 # Names that would clash with URL paths such as /data/new or the API.
+#: Column sizes of erp_entities / erp_fields (see erp.schema) that users can fill.
+LABEL_MAX, DEFAULT_MAX, HELP_MAX, CHOICE_MAX = 200, 255, 500, 255
 RESERVED_ENTITY_NAMES = {"new", "api", "admin", "files"}
 
 
@@ -208,6 +211,10 @@ def validate_entity(ent: Entity, is_new: bool) -> dict[str, str]:
             errors["name"] = "error.invalid_identifier"
     if not (ent.label or "").strip():
         errors["label"] = "error.required"
+    elif len(ent.label.strip()) > LABEL_MAX:
+        # Lengths are checked here because SQLite accepts any length while
+        # PostgreSQL, MySQL and SQL Server refuse values longer than the column.
+        errors["label"] = "error.label_too_long"  # LABEL_MAX characters
     if ent.perm_user not in PERM_USER:
         errors["perm_user"] = "error.invalid_value"
     if ent.perm_dealer not in PERM_DEALER:
@@ -225,7 +232,7 @@ def _entity_values(ent: Entity) -> dict:
         "label": ent.label.strip(),
         "description": ent.description or "",
         "menu_id": ent.menu_id,
-        "sort_order": int(ent.sort_order or 0),
+        "sort_order": clamp_order(ent.sort_order),
         "perm_user": ent.perm_user,
         "perm_dealer": ent.perm_dealer,
         "title_field": ent.title_field or None,
@@ -317,14 +324,26 @@ def _validate_field(f: Field, ent: Entity, is_new: bool) -> None:
             if not 0 <= int(f.decimal_places) <= 8:
                 raise ValidationError("error.invalid_value")
     if not (f.label or "").strip():
-        raise ValidationError("error.required")
+        raise ValidationError("error.required", field="label")
+    # ``field`` tells the form which control to mark; it is ignored by the texts.
+    if len(f.label.strip()) > LABEL_MAX:
+        raise ValidationError("error.too_long", max=LABEL_MAX, field="label")
+    if len(f.help_text or "") > HELP_MAX:
+        raise ValidationError("error.too_long", max=HELP_MAX, field="help_text")
     if f.field_type == "reference" and not f.ref_entity:
         raise ValidationError("error.reference_required")
     if f.field_type == "choice" and not f.choices:
         raise ValidationError("error.options_required")
+    if f.field_type == "choice" and any(len(c) > CHOICE_MAX for c in f.choices):
+        # Choice values are stored in a VARCHAR(255) column of the data table.
+        raise ValidationError("error.too_long", max=CHOICE_MAX, field="options")
+    if f.field_type == "currency" and f.currency not in (None, "") and f.currency not in CURRENCIES:
+        raise ValidationError("error.invalid_value", field="currency")
     if f.default_value not in (None, ""):
         if f.is_file or f.field_type == "reference":
             raise ValidationError("error.no_default_allowed")
+        if len(f.default_value) > DEFAULT_MAX:
+            raise ValidationError("error.too_long", max=DEFAULT_MAX, field="default_value")
         f.parse(f.default_value)
 
 
@@ -342,7 +361,7 @@ def _field_values(f: Field) -> dict:
         "ref_entity": f.ref_entity or None,
         "default_value": f.default_value or None,
         "help_text": f.help_text or None,
-        "sort_order": int(f.sort_order or 0),
+        "sort_order": clamp_order(f.sort_order),
     }
 
 

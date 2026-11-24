@@ -279,6 +279,10 @@ class BaseHandler(tornado.web.RequestHandler):
         nxt = self.get_argument("next", default)
         if not nxt.startswith("/") or nxt.startswith("//") or "\\" in nxt:
             return default
+        if any(ord(c) < 0x21 or ord(c) == 0x7F for c in nxt):
+            # Browsers drop tabs and line breaks from URLs ("/<TAB>/evil" would
+            # become "//evil"), and Tornado refuses them in headers (HTTP 500).
+            return default
         return nxt
 
 

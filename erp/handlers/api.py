@@ -290,7 +290,6 @@ class RecordsHandler(ApiHandler):
         items = payload if batch else [payload]
         if not items or len(items) > MAX_BATCH or not all(isinstance(i, dict) for i in items):
             raise ApiError(400, "invalid_body", f"send a JSON object or an array of 1..{MAX_BATCH} objects")
-        self.check_rate()
         prepared = []
         for index, item in enumerate(items):
             unknown = [k for k in item if ent.field(k) is None and k not in ("id",)]
@@ -299,6 +298,9 @@ class RecordsHandler(ApiHandler):
                 details = errors_json(errors) | {k: "unknown_field" for k in unknown}
                 raise ApiError(422, "validation_failed", details={"index": index, "fields": details} if batch else details)
             prepared.append(values)
+        # The rate limit is checked after validation: a rejected request does not
+        # make the sensor wait before it can send the corrected values.
+        self.check_rate()
 
         def insert(conn):
             return [records_repo.create_record(conn, ent, v, None, self.key["id"]) for v in prepared]
@@ -331,12 +333,14 @@ class RecordHandler(ApiHandler):
         payload = self.body_json()
         if not isinstance(payload, dict):
             raise ApiError(400, "invalid_body")
-        self.check_rate()
         # Unknown keys are refused instead of ignored, so typos in sensor programs are noticed at once.
         unknown = [k for k in payload if ent.field(k) is None and k != "id"]
         values, errors = records_repo.validate(ent, payload, partial=partial)
         if errors or unknown:
             raise ApiError(422, "validation_failed", details=errors_json(errors) | {k: "unknown_field" for k in unknown})
+        # The rate limit is checked after validation: a rejected request does not
+        # make the sensor wait before it can send the corrected values.
+        self.check_rate()
         try:
             removed = await self.state.db.run(records_repo.update_record, ent, int(record_id), values, None, self.key["id"])
         except KeyError:
@@ -493,13 +497,13 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
             items = payload if isinstance(payload, list) else [payload]
             if not items or len(items) > MAX_BATCH or not all(isinstance(i, dict) for i in items):
                 raise ApiError(400, "invalid_body")
-            self.check_rate()
             prepared = []
             for item in items:
                 values, errors = records_repo.validate(ent, records_repo.apply_defaults(ent, item))
                 if errors:
                     raise ApiError(422, "validation_failed", details=errors_json(errors))
                 prepared.append(values)
+            self.check_rate()  # after validation, as for REST requests
             ids = await state.db.run(
                 lambda conn: [records_repo.create_record(conn, ent, v, None, self.key["id"]) for v in prepared])
             self.write_message(json.dumps({"event": "stored", "ids": ids}))
