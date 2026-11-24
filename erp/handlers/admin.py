@@ -113,7 +113,7 @@ class EntityFormHandler(AdminHandler):
         out = []
         if is_new:
             out.append(FormField("name", t("entities.name"), "text", v("name"), required=True, help=t("entities.name_help"),
-                                 error=self.err(errors, "name"), attrs={"pattern": "[a-z][a-z0-9_]{0,49}", "maxlength": "50"}))
+                                 error=self.err(errors, "name"), attrs={"pattern": "[a-z][a-z0-9_]{0,49}", "maxlength": "50", "autocapitalize": "none", "autocorrect": "off", "spellcheck": "false"}))
         else:
             out.append(FormField("name", t("entities.name"), "static", ent.name))
         out += [
@@ -256,7 +256,7 @@ class FieldFormHandler(AdminHandler):
         if is_new:
             out += [
                 FormField("name", t("fields.name"), "text", v("name"), required=True, help=t("fields.name_help"),
-                          error=self.err(errors, "name"), attrs={"pattern": "[a-z][a-z0-9_]{0,49}", "maxlength": "50"}),
+                          error=self.err(errors, "name"), attrs={"pattern": "[a-z][a-z0-9_]{0,49}", "maxlength": "50", "autocapitalize": "none", "autocorrect": "off", "spellcheck": "false"}),
                 FormField("label", t("fields.label"), "text", v("label"), required=True, error=self.err(errors, "label")),
                 FormField("field_type", t("fields.type"), "select", v("field_type", "text"),
                           options=[(k, t(f"type.{k}")) for k in FIELD_TYPES], help=t("fields.type_help")),
@@ -523,7 +523,8 @@ class UserFormHandler(AdminHandler):
         fields = []
         if target is None:
             fields.append(FormField("username", t("users.username"), "text", v("username"), required=True,
-                                    error=e("username"), help=t("users.username_help")))
+                                    error=e("username"), help=t("users.username_help"),
+                                    attrs={"autocomplete": "off", "autocapitalize": "none", "autocorrect": "off", "spellcheck": "false"}))
         else:
             fields.append(FormField("username", t("users.username"), "static", target["username"]))
         fields += [

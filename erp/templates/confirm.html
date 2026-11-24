@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>{{ title }}</h1>
-<form method="post" action="{{ action }}" data-main>
+<form method="post" action="{{ action }}" data-main data-nodirty>
 {% module xsrf_form_html() %}
 <p class="{{ 'warn' if danger else 'intro' }}">{{ message }}</p>
 {% if confirm_input %}
 <div class="row">
   <label for="f_confirm">{{ t("common.type_to_confirm", name=confirm_input) }}</label>
-  <div class="ctl"><input type="text" id="f_confirm" name="confirm" required autocomplete="off" autofocus></div>
+  <div class="ctl"><input type="text" id="f_confirm" name="confirm" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus></div>
 </div>
 {% end %}
 <div class="actions">

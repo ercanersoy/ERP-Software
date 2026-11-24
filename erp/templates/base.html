@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{{ static_url('style.css') }}">
 <script src="{{ static_url('app.js') }}" defer></script>
 </head>
-<body class="{{ page_class }}"{% if back_url %} data-back="{{ back_url }}"{% end %}>
+<body class="{{ page_class }}"{% if back_url %} data-back="{{ back_url }}"{% end %} data-unsaved="{{ t('common.unsaved') }}">
 <a class="skip" href="#main">{{ t("common.skip") }}</a>
 <header class="top">
   <a class="brand" href="/">{{ cfg.get("company_name") or "ERP" }}</a>
@@ -16,10 +16,12 @@
     <span class="role">({{ t("role." + user["role"]) }})</span> ·{% end %}
     {% for lang_code in languages %}{% if lang_code == loc.code %}<strong class="lang">{{ lang_code }}</strong>{% else %}<a class="lang" lang="{{ lang_code }}" hreflang="{{ lang_code }}" href="{% if not installed %}/setup?lang={{ lang_code }}{% elif not user %}/login?lang={{ lang_code }}{% else %}/lang/{{ lang_code }}?next={{ url_escape(request.uri) }}{% end %}">{{ lang_code }}</a>{% end %} {% end %}
     {% if user %}· <a href="/logout">{{ t("menu.logout") }}</a>{% end %}
+    <button type="button" class="keys-btn" data-keyhelp title="{{ t('common.show_keys') }}" aria-label="{{ t('common.show_keys') }}">?</button>
   </span>
 </header>
 {% if crumbs %}
 <nav class="crumbs" aria-label="{{ t('common.breadcrumb') }}">
+  {% if back_url %}<a class="back button" href="{{ back_url }}" data-back-link>‹ {{ t("common.back") }}</a>{% end %}
   {% for crumb_i, (crumb_label, crumb_url) in enumerate(crumbs) %}{% if crumb_i %} › {% end %}{% if crumb_i < len(crumbs) - 1 %}<a href="{{ crumb_url }}">{{ crumb_label }}</a>{% else %}<span aria-current="page">{{ crumb_label }}</span>{% end %}{% end %}
 </nav>
 {% end %}
@@ -27,7 +29,7 @@
 {% if flash %}<p class="flash {{ flash[0] }}" role="status">{{ flash[1] }}</p>{% end %}
 {% block body %}{% end %}
 </main>
-<footer class="keys">
+<footer class="keys" aria-hidden="true">
   <kbd>Esc</kbd> {{ t("keys.back") }} · <kbd>0</kbd> {{ t("keys.main") }} · <kbd>↑</kbd><kbd>↓</kbd> {{ t("keys.move") }} · <kbd>Enter</kbd> {{ t("keys.open") }} · <kbd>?</kbd> {{ t("keys.help") }}
 </footer>
 <div id="keyhelp" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="keyhelp-title">

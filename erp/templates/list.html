@@ -5,21 +5,22 @@
 {% if notice %}<p class="notice">{{ notice }}</p>{% end %}
 {% if actions or search %}
 <div class="toolbar">
-  {% for a in actions %}<a class="button" href="{{ a['url'] }}" data-key="{{ a['key'].lower() }}"><kbd>{{ a["key"] }}</kbd> {{ a["label"] }}</a> {% end %}
+  {% for a in actions %}<a class="button{% if a.get('attr') == 'data-delete' %} danger{% end %}" href="{{ a['url'] }}" data-key="{{ a['key'].lower() }}"><kbd>{{ a["key"] }}</kbd> {{ a["label"] }}</a> {% end %}
   {% if search %}
   <form method="get" class="search" role="search">
-    <input type="search" name="q" value="{{ q }}" data-search aria-label="{{ t('common.search') }}" placeholder="{{ t('common.search') }} (/)">
+    <input type="search" name="q" value="{{ q }}" data-search aria-label="{{ t('common.search') }}" placeholder="{{ t('common.search') }}" enterkeyhint="search" autocomplete="off">
     {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ 'desc' if desc else 'asc' }}">{% end %}
     <button type="submit">{{ t("common.search") }}</button>
-    {% if q %}<a href="?">{{ t("common.clear") }}</a>{% end %}
+    {% if q %}<a class="button" href="?">{{ t("common.clear") }}</a>{% end %}
   </form>
   {% end %}
 </div>
 {% end %}
 {% if rows %}
+<div class="table-wrap">
 <table class="grid rows">
 <thead><tr>
-{% for c in columns %}<th{% if c.get("num") %} class="num"{% end %} scope="col">{% if sort_base and c.get("key") %}<a href="{{ sort_base }}&amp;sort={{ c['key'] }}&amp;dir={{ 'asc' if (sort == c['key'] and desc) else 'desc' }}">{{ c["label"] }}{% if sort == c["key"] %}{{ " ▼" if desc else " ▲" }}{% end %}</a>{% else %}{{ c["label"] }}{% end %}</th>{% end %}
+{% for c in columns %}<th{% if c.get("num") %} class="num"{% end %} scope="col"{% if sort_base and c.get("key") and sort == c["key"] %} aria-sort="{{ 'descending' if desc else 'ascending' }}"{% end %}>{% if sort_base and c.get("key") %}<a href="{{ sort_base }}&amp;sort={{ c['key'] }}&amp;dir={{ 'asc' if (sort == c['key'] and desc) else 'desc' }}">{{ c["label"] }}{% if sort == c["key"] %}{{ " ▼" if desc else " ▲" }}{% end %}</a>{% else %}{{ c["label"] }}{% end %}</th>{% end %}
 </tr></thead>
 <tbody>
 {% for r in rows %}
@@ -29,14 +30,15 @@
 {% end %}
 </tbody>
 </table>
+</div>
 {% else %}
 <p class="empty">{{ empty }}</p>
 {% end %}
 {% if pages > 1 or total %}
 <p class="pager">
-  {% if base_url and page > 1 %}<a href="{{ base_url }}&amp;page={{ page - 1 }}" data-prev>« {{ t("common.prev") }}</a> <kbd>PgUp</kbd>{% end %}
+  {% if base_url and page > 1 %}<a class="button" href="{{ base_url }}&amp;page={{ page - 1 }}" data-prev rel="prev">« {{ t("common.prev") }}</a> <kbd>PgUp</kbd>{% end %}
   {{ t("common.page_of", page=page, pages=pages, total=total) }}
-  {% if base_url and page < pages %}<kbd>PgDn</kbd> <a href="{{ base_url }}&amp;page={{ page + 1 }}" data-next>{{ t("common.next") }} »</a>{% end %}
+  {% if base_url and page < pages %}<kbd>PgDn</kbd> <a class="button" href="{{ base_url }}&amp;page={{ page + 1 }}" data-next rel="next">{{ t("common.next") }} »</a>{% end %}
 </p>
 {% end %}
 {% end %}

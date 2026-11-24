@@ -254,7 +254,16 @@ class RecordFormHandler(EntityHandler):
             case "date":
                 return value.isoformat()
             case "decimal" | "currency":
-                return format(value, "f")
+                # Currency columns keep 4 decimals by default; showing "12500.5000"
+                # in the edit field is noise, so surplus trailing zeros are
+                # dropped (at least 2 places stay: "12500.50").  The value saved
+                # back is the same number.
+                text = format(value, "f")
+                if "." in text:
+                    whole, frac = text.split(".")
+                    frac = frac.rstrip("0").ljust(min(2, f.scale), "0")
+                    text = f"{whole}.{frac}" if frac else whole
+                return text
             case "boolean":
                 return bool(value)
         return str(value)

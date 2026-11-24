@@ -60,7 +60,7 @@ class SetupHandler(BaseHandler):
             FormField("db_odbc_driver", t("setup.db_odbc_driver"), "text",
                       v("db_odbc_driver", "ODBC Driver 18 for SQL Server")),
             FormField("admin_username", t("setup.admin_username"), "text", v("admin_username", "admin"),
-                      required=True, error=e("admin_username")),
+                      required=True, error=e("admin_username"), attrs={"autocapitalize": "none", "autocorrect": "off", "spellcheck": "false"}),
             FormField("admin_full_name", t("users.full_name"), "text", v("admin_full_name")),
             FormField("admin_password", t("setup.admin_password"), "password", "", required=True,
                       error=e("admin_password"), help=t("users.password_help"),

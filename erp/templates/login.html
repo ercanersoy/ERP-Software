@@ -2,12 +2,12 @@
 {% block body %}
 <h1>{{ t("login.title") }}</h1>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% end %}
-<form method="post" action="/login" class="login" data-main>
+<form method="post" action="/login" class="login" data-main data-nodirty>
 {% module xsrf_form_html() %}
 <input type="hidden" name="next" value="{{ next_url }}">
 <div class="row">
   <label for="f_username">{{ t("users.username") }}</label>
-  <div class="ctl"><input type="text" id="f_username" name="username" value="{{ username }}" required autofocus autocomplete="username" autocapitalize="none"></div>
+  <div class="ctl"><input type="text" id="f_username" name="username" value="{{ username }}" required autofocus autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
 </div>
 <div class="row">
   <label for="f_password">{{ t("users.password") }}</label>

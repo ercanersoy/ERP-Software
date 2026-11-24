@@ -23,7 +23,6 @@ breadcrumb = "Bulunduğunuz yer"
 type_to_confirm = "Onaylamak için “{name}” yazın"
 back = "Geri"
 unsaved = "Kaydedilmemiş değişiklikler var. Sayfadan çıkıp bunları silmek istiyor musunuz?"
-sending = "Kaydediliyor…"
 show_keys = "Klavye kısayolları"
 
 [menu]

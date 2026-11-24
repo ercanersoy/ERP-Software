@@ -23,7 +23,6 @@ breadcrumb = "You are here"
 type_to_confirm = "Type “{name}” to confirm"
 back = "Back"
 unsaved = "You have unsaved changes. Leave this page and discard them?"
-sending = "Saving…"
 show_keys = "Keyboard shortcuts"
 
 [menu]

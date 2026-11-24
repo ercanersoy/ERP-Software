@@ -1,8 +1,21 @@
 /*
  * ERP-Software - plain style sheet.
- * Only web safe colours (the 216 colour palette: 00, 33, 66, 99, CC, FF)
- * and web safe font families are used.
+ *
+ * Design rules of the project:
+ *   - only web safe colours (the 216 colour palette: every channel is one of
+ *     00, 33, 66, 99, CC, FF) and web safe font families are used;
+ *   - no external resources (fonts, images, frameworks);
+ *   - works with keyboard, mouse and touch screens, on small screens and in print.
+ *
+ * Layout of the file:
+ *   1. base elements          6. tables
+ *   2. page frame             7. forms
+ *   3. focus indicators       8. record view, help, overlay, monitor
+ *   4. menus and messages     9. small screens
+ *   5. toolbar and buttons   10. touch screens, 11. print
  */
+
+/* ===================================================================== 1. base */
 html { background: #FFFFFF; }
 body {
   margin: 0;
@@ -15,6 +28,7 @@ body {
 a { color: #003399; }
 a:visited { color: #663399; }
 a:hover { color: #CC0000; }
+/* Keyboard keys shown next to actions ("n New", "Ctrl+S"). */
 kbd {
   display: inline-block;
   min-width: 1em;
@@ -33,10 +47,16 @@ pre { background: #FFFFCC; border: 1px solid #CCCC99; padding: 8px; overflow-x: 
 h1 { font-family: Georgia, "Times New Roman", Times, serif; font-size: 22px; font-weight: normal; color: #003366; margin: 0 0 12px; }
 h2 { font-size: 17px; color: #003366; }
 h3, h4, h5 { font-size: 15px; color: #003366; }
+img, video { max-width: 100%; height: auto; }
 
+/* Removes the 300 ms "is this a double tap zoom?" delay of mobile browsers. */
+a, button, input, select, textarea, label, summary, tr[data-href] { touch-action: manipulation; }
+
+/* "Skip to content" link: invisible until it gets the keyboard focus. */
 .skip { position: absolute; left: -9999px; }
 .skip:focus { left: 8px; top: 8px; background: #FFFF00; padding: 4px; z-index: 10; }
 
+/* ===================================================================== 2. page frame */
 header.top {
   display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
   gap: 8px; padding: 6px 16px; background: #003366; color: #FFFFFF;
@@ -46,25 +66,38 @@ header.top .brand { font-weight: bold; text-decoration: none; font-size: 15px; }
 header.top .role { color: #CCCCCC; }
 header.top .lang { font-size: 12px; }
 header.top strong.lang { color: #FFCC00; }
+/* "?" button that opens the keyboard shortcut list (hidden on touch screens). */
+header.top .keys-btn {
+  padding: 0 7px; margin-left: 4px; background: #336699; border-color: #CCCCCC; color: #FFFFFF;
+  font-weight: bold; border-radius: 50%; line-height: 1.5;
+}
+header.top .keys-btn:hover { background: #FFFFCC; color: #000000; }
 
 nav.crumbs { padding: 6px 16px; background: #CCCCCC; border-bottom: 1px solid #999999; font-size: 13px; }
+/* The back button repeats Esc for mouse and touch users; on desktops the
+ * breadcrumb already does this job, so the button is shown on touch and
+ * small screens only (see sections 9 and 10). */
+nav.crumbs .back { display: none; margin-right: 8px; }
 main { padding: 16px; max-width: 1100px; }
 footer.keys { padding: 8px 16px; border-top: 1px solid #CCCCCC; color: #666666; font-size: 12px; }
 
+/* ===================================================================== 3. focus */
+/* A thick orange outline shows where the keyboard focus is.  It is hidden for
+ * mouse clicks (:focus-visible) where the browser supports that distinction. */
 :focus { outline: 3px solid #FF9900; outline-offset: 1px; }
 :focus:not(:focus-visible) { outline: none; }
 :focus-visible { outline: 3px solid #FF9900; outline-offset: 1px; }
 
-/* menus */
+/* ===================================================================== 4. menus & messages */
 ul.menu { list-style: none; padding: 0; margin: 0 0 16px; max-width: 640px; }
 ul.menu li { margin: 0; }
 ul.menu li.sep { margin-top: 12px; border-top: 1px dotted #999999; padding-top: 6px; }
 ul.menu a { display: block; padding: 6px 8px; text-decoration: none; color: #000000; border: 1px solid transparent; }
 ul.menu a:hover, ul.menu a:focus { background: #FFFFCC; border-color: #FF9900; outline: none; }
+ul.menu a:active { background: #FFCC66; }
 ul.menu a kbd { margin-right: 8px; }
 ul.menu .hint { display: block; color: #666666; font-size: 12px; padding: 0 8px 4px 40px; margin-top: -4px; }
 
-/* messages */
 .flash, .notice, .error, .warn, .intro, .message { padding: 8px 10px; margin: 0 0 12px; border: 1px solid; }
 .flash.ok { background: #CCFFCC; border-color: #339933; }
 .flash.error, .error { background: #FFCCCC; border-color: #CC0000; color: #000000; }
@@ -76,20 +109,29 @@ ul.menu .hint { display: block; color: #666666; font-size: 12px; padding: 0 8px 
 pre.token { font-size: 15px; background: #FFFFCC; user-select: all; }
 pre.trace { font-size: 11px; }
 
-/* toolbar & buttons */
+/* ===================================================================== 5. toolbar & buttons */
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 12px; }
-.toolbar form.search { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.toolbar form.search { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-left: auto; }
 .button, button {
   display: inline-block; padding: 4px 10px; border: 1px solid #666666; background: #CCCCCC;
   color: #000000; text-decoration: none; font: inherit; cursor: pointer; border-radius: 2px;
 }
 .button:visited { color: #000000; }
 .button:hover, button:hover { background: #FFFFCC; color: #000000; }
+.button:active, button:active { background: #FFCC66; }
 button.primary { background: #336699; border-color: #003366; color: #FFFFFF; }
 button.primary:hover { background: #003366; color: #FFFFFF; }
-button.danger { background: #CC0000; border-color: #990000; color: #FFFFFF; }
+/* Destructive actions (delete) are red, so they are not hit by mistake. */
+button.danger, .button.danger, .button.danger:visited { background: #CC0000; border-color: #990000; color: #FFFFFF; }
+button.danger:hover, .button.danger:hover { background: #990000; color: #FFFFFF; }
+.button.danger kbd { background: #FFFFFF; }
+/* Feedback while a form is being sent (see the double submission guard in app.js). */
+form[aria-busy="true"] button[type=submit] { cursor: progress; opacity: 0.6; }
 
-/* tables */
+/* ===================================================================== 6. tables */
+/* Wide tables scroll sideways inside this box instead of widening the page. */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 0 12px; }
+.table-wrap table.grid { margin: 0; }
 table.grid { border-collapse: collapse; width: 100%; margin: 0 0 12px; }
 table.grid th, table.grid td { border: 1px solid #CCCCCC; padding: 4px 6px; text-align: left; vertical-align: top; }
 table.grid th { background: #CCCCCC; font-weight: bold; }
@@ -99,16 +141,19 @@ table.rows tbody tr { cursor: pointer; }
 table.rows tbody tr:nth-child(even) { background: #FFFFFF; }
 table.rows tbody tr:nth-child(odd) { background: #FFFFFF; }
 table.rows tbody tr:hover, table.rows tbody tr:focus { background: #FFFFCC; outline: 2px solid #FF9900; }
-.pager { color: #333333; }
+table.rows tbody tr:active { background: #FFCC66; }
+.pager { color: #333333; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
-/* forms */
+/* ===================================================================== 7. forms */
+/* Two columns: label on the left, control with help and error on the right. */
 form .row { display: grid; grid-template-columns: 220px 1fr; gap: 4px 12px; padding: 5px 0; border-bottom: 1px dotted #CCCCCC; }
 form .row label, form .row .label { padding-top: 3px; font-weight: bold; }
 form .row.has-error { background: #FFCCCC; }
-form .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+form .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
 input[type=text], input[type=password], input[type=number], input[type=email], input[type=search],
 input[type=date], input[type=datetime-local], select, textarea {
   font: inherit; padding: 3px 4px; border: 1px solid #666666; background: #FFFFFF; color: #000000; max-width: 100%;
+  box-sizing: border-box;
 }
 input[type=text], input[type=password], input[type=email], select, textarea { width: 420px; }
 textarea { min-height: 70px; }
@@ -117,38 +162,88 @@ input:focus, select:focus, textarea:focus { background: #FFFFCC; outline: 3px so
 .help { flex-basis: 100%; color: #666666; font-size: 12px; }
 .ferror { flex-basis: 100%; color: #CC0000; font-weight: bold; }
 .suffix { color: #333333; font-weight: bold; }
-.static { font-family: "Courier New", Courier, monospace; }
+.static { font-family: "Courier New", Courier, monospace; overflow-wrap: anywhere; }
 fieldset { border: 1px solid #CCCCCC; padding: 4px 8px; margin: 0; }
 label.opt { display: block; font-weight: normal; }
 .actions { padding: 12px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
-/* record view */
+/* ===================================================================== 8. view, help, overlay, monitor */
 dl.view { display: grid; grid-template-columns: 220px 1fr; gap: 0; margin: 0; }
-dl.view dt, dl.view dd { margin: 0; padding: 5px 6px; border-bottom: 1px dotted #CCCCCC; }
+dl.view dt, dl.view dd { margin: 0; padding: 5px 6px; border-bottom: 1px dotted #CCCCCC; min-width: 0; overflow-wrap: anywhere; }
 dl.view dt { font-weight: bold; }
 dl.view .meta { color: #666666; font-size: 12px; }
-dl.view img { max-width: 400px; max-height: 300px; border: 1px solid #CCCCCC; }
-dl.view video { max-width: 480px; max-height: 360px; background: #000000; }
+dl.view img { max-width: min(400px, 100%); max-height: 300px; border: 1px solid #CCCCCC; }
+dl.view video { max-width: min(480px, 100%); max-height: 360px; background: #000000; }
 .multi { white-space: pre-wrap; }
 
-/* help */
 .helpnav { float: right; width: 200px; margin: 0 0 12px 16px; }
 article.doc { max-width: 780px; }
 article.doc table.grid { width: auto; }
+article.doc table.grid { display: block; overflow-x: auto; }
 
-/* key help overlay */
-.overlay { position: fixed; inset: 0; background: transparent; display: flex; align-items: center; justify-content: center; }
+/* Keyboard shortcut overlay; a click on the area around the box closes it. */
+.overlay { position: fixed; inset: 0; background: transparent; display: flex; align-items: center; justify-content: center; z-index: 20; }
 .overlay[hidden] { display: none; }
-.overlay .box { background: #FFFFFF; border: 2px solid #003366; padding: 16px; max-width: 560px; width: 90%; }
+.overlay .box { background: #FFFFFF; border: 2px solid #003366; padding: 16px; max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; }
 
 .monitor-controls input[type=number] { width: 110px; }
 .status { color: #666666; font-size: 12px; }
 
+/* ===================================================================== 9. small screens */
 @media (max-width: 700px) {
+  main { padding: 12px; }
   form .row, dl.view { grid-template-columns: 1fr; }
-  input[type=text], input[type=password], input[type=email], select, textarea { width: 100%; }
+  form .row label, form .row .label { padding-top: 0; }
+  input[type=text], input[type=password], input[type=email], input[type=search], select, textarea { width: 100%; }
+  .toolbar form.search { margin-left: 0; width: 100%; }
+  .toolbar form.search input[type=search] { flex: 1 1 auto; width: auto; }
   .helpnav { float: none; width: auto; }
+  header.top .role { display: none; }
+  nav.crumbs .back { display: inline-block; }
+  /* Keep "Save" reachable on long forms: the button bar sticks to the bottom. */
+  form[data-main] > .actions {
+    position: sticky; bottom: 0; z-index: 5;
+    background: #FFFFFF; border-top: 1px solid #999999; padding: 8px 0;
+  }
 }
+
+/* ===================================================================== 10. touch screens */
+/* pointer: coarse = the main pointing device is a finger.  Controls get at
+ * least 44 x 44 CSS pixels (the size recommended by WCAG 2.5.5 and the
+ * Apple / Android guidelines), and 16px text in fields stops iOS from zooming
+ * into the page when a field gets the focus. */
+@media (pointer: coarse) {
+  body { font-size: 16px; }
+  .button, button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 44px; min-width: 44px; padding: 8px 14px; box-sizing: border-box;
+  }
+  input[type=text], input[type=password], input[type=number], input[type=email], input[type=search],
+  input[type=date], input[type=datetime-local], select, textarea {
+    font-size: 16px; min-height: 44px; padding: 8px;
+  }
+  input[type=checkbox], input[type=radio] { width: 24px; height: 24px; margin: 4px 8px 4px 0; vertical-align: middle; }
+  label.opt { padding: 8px 0; }
+  ul.menu a { padding: 12px 10px; }
+  ul.menu .hint { padding-left: 46px; margin-top: -8px; }
+  table.grid th, table.grid td { padding: 10px 8px; }
+  table.grid th a { display: block; }
+  nav.crumbs { padding: 8px 12px; }
+  nav.crumbs a { display: inline-block; padding: 6px 0; }
+  nav.crumbs .back { display: inline-flex; min-height: 44px; padding: 4px 14px; }
+  header.top .lang { display: inline-block; padding: 8px 4px; font-size: 14px; }
+  form[data-main] > .actions {
+    position: sticky; bottom: 0; z-index: 5;
+    background: #FFFFFF; border-top: 1px solid #999999; padding: 8px 0;
+  }
+}
+/* Devices without a hardware keyboard: hide the key hints, they only take room. */
+@media (hover: none) and (pointer: coarse) {
+  footer.keys, header.top .keys-btn, .actions > kbd, .pager > kbd, .toolbar .button kbd, .monitor-controls button kbd { display: none; }
+}
+
+/* ===================================================================== 11. print */
 @media print {
-  header.top, nav.crumbs, footer.keys, .toolbar, .actions { display: none; }
+  header.top, nav.crumbs, footer.keys, .toolbar, .actions, .pager { display: none; }
+  .table-wrap { overflow: visible; }
 }
