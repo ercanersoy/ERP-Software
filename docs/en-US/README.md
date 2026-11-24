@@ -146,3 +146,9 @@ The **audit log** records logins, changes of definitions, users, API keys and se
 ## Look and feel
 
 The interface is deliberately plain: it uses only web safe colors (the 216 color palette) and web safe font families (Verdana, Tahoma, Arial, Helvetica, Georgia, Times New Roman, Courier New). It needs no external resources and works on small screens and in print.
+
+## Touch screens
+
+The program also works on tablets, phones and touch terminals. On devices used with a finger, buttons, menu items, table rows and input fields are at least 44 pixels high and the keyboard hints are hidden. The **‹ Back** button in the navigation bar takes the place of `Esc`. No text field is focused when a page opens, so the on-screen keyboard does not cover the page. On long forms the **Save** button stays at the bottom of the screen; wide tables scroll sideways inside their own box.
+
+On all devices the program asks before unsaved form input is discarded, and tapping **Save** twice does not create the same record twice.

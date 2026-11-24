@@ -146,3 +146,9 @@ Program içinde bütün metinler Unicode'dur. Sisteme giren veya çıkan dosyala
 ## Görünüm
 
 Arayüz bilerek sade tutulmuştur: yalnızca web güvenli renkler (216 renklik palet) ve web güvenli yazı aileleri (Verdana, Tahoma, Arial, Helvetica, Georgia, Times New Roman, Courier New) kullanılır. Dış kaynak gerektirmez; küçük ekranlarda ve yazdırırken de çalışır.
+
+## Dokunmatik ekranlar
+
+Program tablet, telefon ve dokunmatik terminallerde de kullanılabilir. Parmakla kullanılan cihazlarda düğmeler, menü öğeleri, tablo satırları ve giriş alanları en az 44 piksel yüksekliğinde gösterilir; klavye ipuçları gizlenir. `Esc` tuşunun yerini gezinme çubuğundaki **‹ Geri** düğmesi alır. Sayfa açılırken metin alanına odaklanılmaz, böylece ekran klavyesi sayfayı kapatmaz. Uzun formlarda **Kaydet** düğmesi ekranın altında sabit kalır; geniş tablolar kendi kutularında yana kaydırılır.
+
+Tüm cihazlarda kaydedilmemiş bir form bırakılmadan önce onay istenir ve **Kaydet** düğmesine iki kez dokunmak aynı kaydı iki kez oluşturmaz.
