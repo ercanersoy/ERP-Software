@@ -535,14 +535,21 @@ def to_csv(conn: Conn, ent, charset: str = "utf-8", delimiter: str = ";", rows: 
     return charsets.encode(buf.getvalue(), charsets.normalize(charset), errors="replace")
 
 
-def parse_csv(ent, data: bytes, charset: str = "utf-8", delimiter: str = ";") -> tuple[list[dict], list[tuple[int, str, ValidationError]]]:
-    """Parse CSV data for an entity.  Returns ``(values list, errors)``."""
+def parse_csv(ent, data: bytes, charset: str = "utf-8",
+              delimiter: str = ";") -> tuple[list[tuple[int, dict]], list[tuple[int, str, ValidationError]]]:
+    """Parse CSV data for an entity.
+
+    Returns ``(rows, errors)``: ``rows`` holds ``(line number, values)`` of
+    every valid line, ``errors`` holds ``(line number, field, error)``.  The
+    line numbers count the header as line 1, like a spreadsheet does, so
+    errors found later (e.g. by unique checks) can still name the right line.
+    """
     import csv
     import io
 
     text = charsets.decode(data, charsets.normalize(charset))
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
-    good: list[dict] = []
+    good: list[tuple[int, dict]] = []
     errors: list[tuple[int, str, ValidationError]] = []
     for lineno, raw in enumerate(reader, start=2):
         item = {k.strip(): v for k, v in raw.items() if k and ent.field(k.strip()) and not ent.field(k.strip()).is_file}
@@ -551,7 +558,7 @@ def parse_csv(ent, data: bytes, charset: str = "utf-8", delimiter: str = ";") ->
             for name, err in errs.items():
                 errors.append((lineno, name, err))
             continue
-        good.append(values)
+        good.append((lineno, values))
     return good, errors
 
 

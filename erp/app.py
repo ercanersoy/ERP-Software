@@ -21,6 +21,9 @@ from .handlers.base import NotFoundHandler
 log = logging.getLogger("erp")
 BASE_DIR = Path(__file__).resolve().parent
 NAME = r"([a-z][a-z0-9_]{0,49})"
+#: Numeric ids in URLs.  At most 18 digits, so every matching id fits into the
+#: signed 64 bit integer columns (longer numbers simply do not match: 404).
+ID = r"(\d{1,18})"
 
 
 class AppState:
@@ -83,7 +86,7 @@ def routes() -> list:
         (r"/lang/(tr-TR|en-US|en-GB)", auth.LanguageHandler),
         (r"/account", auth.AccountHandler),
         (r"/", menus.MenuHandler),
-        (r"/menu/(\d+)", menus.MenuHandler),
+        (rf"/menu/{ID}", menus.MenuHandler),
         (r"/help", menus.HelpHandler),
         (r"/help/([A-Za-z0-9_-]+)", menus.HelpHandler),
         # data screens
@@ -93,10 +96,10 @@ def routes() -> list:
         (rf"/data/{NAME}/latest\.json", data.LatestJsonHandler),
         (rf"/data/{NAME}/export", data.EntityExportHandler),
         (rf"/data/{NAME}/import", data.EntityImportHandler),
-        (rf"/data/{NAME}/(\d+)", data.RecordViewHandler),
-        (rf"/data/{NAME}/(\d+)/edit", data.RecordFormHandler),
-        (rf"/data/{NAME}/(\d+)/delete", data.RecordDeleteHandler),
-        (r"/files/(\d+)(?:/[^/]*)?", files.FileHandler),
+        (rf"/data/{NAME}/{ID}", data.RecordViewHandler),
+        (rf"/data/{NAME}/{ID}/edit", data.RecordFormHandler),
+        (rf"/data/{NAME}/{ID}/delete", data.RecordDeleteHandler),
+        (rf"/files/{ID}(?:/[^/]*)?", files.FileHandler),
         # administration
         (r"/admin", menus.AdminMenuHandler),
         (r"/admin/entities", admin.EntityListHandler),
@@ -109,16 +112,16 @@ def routes() -> list:
         (rf"/admin/entities/{NAME}/fields/{NAME}/delete", admin.FieldDeleteHandler),
         (r"/admin/menus", admin.MenuListHandler),
         (r"/admin/menus/new", admin.MenuFormHandler),
-        (r"/admin/menus/(\d+)", admin.MenuFormHandler),
-        (r"/admin/menus/(\d+)/delete", admin.MenuDeleteHandler),
+        (rf"/admin/menus/{ID}", admin.MenuFormHandler),
+        (rf"/admin/menus/{ID}/delete", admin.MenuDeleteHandler),
         (r"/admin/users", admin.UserListHandler),
         (r"/admin/users/new", admin.UserFormHandler),
-        (r"/admin/users/(\d+)", admin.UserFormHandler),
-        (r"/admin/users/(\d+)/delete", admin.UserDeleteHandler),
+        (rf"/admin/users/{ID}", admin.UserFormHandler),
+        (rf"/admin/users/{ID}/delete", admin.UserDeleteHandler),
         (r"/admin/apikeys", admin.ApiKeyListHandler),
         (r"/admin/apikeys/new", admin.ApiKeyFormHandler),
-        (r"/admin/apikeys/(\d+)", admin.ApiKeyFormHandler),
-        (r"/admin/apikeys/(\d+)/delete", admin.ApiKeyDeleteHandler),
+        (rf"/admin/apikeys/{ID}", admin.ApiKeyFormHandler),
+        (rf"/admin/apikeys/{ID}/delete", admin.ApiKeyDeleteHandler),
         (r"/admin/settings", admin.SettingsHandler),
         (r"/admin/backup", menus.BackupMenuHandler),
         (r"/admin/backup/(config|schema|data|full)", admin.BackupHandler),
@@ -132,10 +135,10 @@ def routes() -> list:
         (rf"/api/v1/entities/{NAME}", api.EntitySchemaHandler),
         (rf"/api/v1/entities/{NAME}/config", api.EntityConfigHandler),
         (rf"/api/v1/entities/{NAME}/records", api.RecordsHandler),
-        (rf"/api/v1/entities/{NAME}/records/(\d+)", api.RecordHandler),
+        (rf"/api/v1/entities/{NAME}/records/{ID}", api.RecordHandler),
         (rf"/api/v1/entities/{NAME}/latest", api.LatestHandler),
         (r"/api/v1/files", api.FileUploadHandler),
-        (r"/api/v1/files/(\d+)", api.FileDownloadHandler),
+        (rf"/api/v1/files/{ID}", api.FileDownloadHandler),
         (rf"/api/v1/stream/{NAME}", api.StreamHandler),
         (r"/api/.*", api.NotFoundApiHandler),
     ]

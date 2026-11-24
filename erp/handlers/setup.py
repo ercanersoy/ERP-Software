@@ -96,9 +96,12 @@ class SetupHandler(BaseHandler):
         dialect = values.get("db_dialect") or "sqlite"
         params = {"dialect": dialect, "name": values.get("db_name", "").strip(), "pool_size": 8}
         if dialect != "sqlite":
+            # isdecimal() (not isdigit()): int() rejects digits such as "²".
+            port_text = values.get("db_port", "").strip()
+            port = int(port_text) if port_text.isdecimal() and len(port_text) <= 5 else 0
             params.update(
                 host=values.get("db_host", "").strip() or "localhost",
-                port=int(values["db_port"]) if values.get("db_port", "").strip().isdigit() else get_dialect(dialect).default_port,
+                port=port if 1 <= port <= 65535 else get_dialect(dialect).default_port,
                 user=values.get("db_user", "").strip(),
                 password=values.get("db_password", ""),
             )
@@ -121,6 +124,17 @@ class SetupHandler(BaseHandler):
         if not values["db_name"].strip():
             errors["db_name"] = "error.required"
             return self.show(values, errors)
+        # Values of the select boxes come from the browser and are not trusted:
+        # an unknown database system would otherwise raise an error page, and
+        # unknown languages, time zones or currencies would be stored as is.
+        if values["db_dialect"] not in DIALECTS:
+            values["db_dialect"] = "sqlite"
+        if values["language"] not in LANGUAGES:
+            values["language"] = "tr-TR"
+        if values["timezone"] not in common_timezones():
+            values["timezone"] = "UTC"
+        if values["default_currency"] not in CURRENCIES:
+            values["default_currency"] = "TRY"
 
         cfg = config.new_config(self.state.config_path)
         cfg.database = self._db_params(values)

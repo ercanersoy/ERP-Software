@@ -13,7 +13,7 @@ import tornado.web
 from .. import __version__, backup, charsets
 from ..db import DIALECTS
 from ..db.database import server_version
-from ..fieldtypes import CURRENCIES, FIELD_TYPES, Field, ValidationError
+from ..fieldtypes import CURRENCIES, EMAIL_RE, FIELD_TYPES, Field, ValidationError
 from ..i18n import LANGUAGES
 from ..repo import apikeys as apikeys_repo
 from ..repo import audit as audit_repo
@@ -459,7 +459,10 @@ class MenuFormHandler(AdminHandler):
         allowed = {m["id"] for m in menus}
         if menu:
             allowed -= menus_repo.descendants(menus, menu["id"]) | {menu["id"]}
-        parent = int(values["parent_id"]) if values["parent_id"].isdigit() and int(values["parent_id"]) in allowed else None
+        parent_text = values["parent_id"]
+        parent = int(parent_text) if parent_text.isdecimal() and len(parent_text) <= 18 else None
+        if parent not in allowed:  # unknown menu, the menu itself or one of its descendants
+            parent = None
         try:
             order = int(values["sort_order"] or 0)
         except ValueError:
@@ -525,7 +528,7 @@ class UserFormHandler(AdminHandler):
             fields.append(FormField("username", t("users.username"), "static", target["username"]))
         fields += [
             FormField("full_name", t("users.full_name"), "text", v("full_name")),
-            FormField("email", t("users.email"), "email", v("email")),
+            FormField("email", t("users.email"), "email", v("email"), error=e("email")),
             FormField("role", t("users.role"), "select", v("role", "user"), error=e("role"),
                       options=[(r, t(f"role.{r}")) for r in users_repo.ROLES], help=t("users.role_help")),
             FormField("language", t("account.language"), "select", v("language"),
@@ -560,6 +563,8 @@ class UserFormHandler(AdminHandler):
         errors = {}
         if values["role"] not in users_repo.ROLES:
             errors["role"] = "error.invalid_value"
+        if values["email"] and (not EMAIL_RE.match(values["email"]) or len(values["email"]) > 200):
+            errors["email"] = "error.invalid_email"
         if target is None:
             username = users_repo.normalize_username(values["username"])
             if not users_repo.valid_username(username):
@@ -589,6 +594,12 @@ class UserFormHandler(AdminHandler):
             if password:
                 await self.db(users_repo.set_password, target["id"], password)
             await self.audit("user_update", target["username"], values["role"])
+            if target["id"] == self.user["id"] and (values["role"] != "admin" or not values["active"]):
+                # Administrators who removed their own rights can no longer open
+                # the user form; send them to the main menu instead of a 403 page.
+                self.flash(self.t("common.saved"))
+                self.redirect("/")
+                return
         self.flash(self.t("common.saved"))
         self.redirect(f"/admin/users/{new_id}")
 
@@ -805,7 +816,7 @@ class SettingsHandler(AdminHandler):
         if values["default_currency"] not in CURRENCIES:
             values["default_currency"] = "TRY"
         for key, lo, hi in (("page_size", 5, 500), ("session_hours", 1, 720)):
-            if not values[key].isdigit() or not lo <= int(values[key]) <= hi:
+            if not values[key].isdecimal() or not lo <= int(values[key]) <= hi:
                 errors[key] = "error.invalid_value"
         if errors:
             return self.show(values, errors, self.t("error.form"))

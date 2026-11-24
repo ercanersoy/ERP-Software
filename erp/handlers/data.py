@@ -318,15 +318,20 @@ class RecordFormHandler(EntityHandler):
 
         upload_dir = self.state.config.upload_dir
         saved: list[dict] = []
+        current_upload: str | None = None  # field whose file is being stored (for error messages)
         try:
             for fname, upload in uploads.items():
+                current_upload = fname
                 f = ent.field(fname)
                 row = await self.db(files_repo.save_file, upload_dir, f.field_type, upload["filename"],
                                     upload["body"], upload.get("content_type"), ent.name, self.user["id"])
                 saved.append(row)
                 values[fname] = row["id"]
+            current_upload = None
             if record is None:
                 new_id = await self.db(records_repo.create_record, ent, values, self.user)
+                # Live WebSocket subscribers (sensor dashboards) get web records too.
+                self.state.publish(ent.name, [new_id])
                 await self.audit("record_create", f"{ent.name}#{new_id}")
                 self.flash(self.t("data.created"))
                 target = f"/data/{ent.name}/{new_id}"
@@ -338,7 +343,8 @@ class RecordFormHandler(EntityHandler):
                 target = f"/data/{ent.name}/{record['id']}"
         except ValidationError as exc:
             await self._discard(saved)
-            errors = {next(iter(uploads)): exc} if uploads else {}
+            # Mark the file field that was rejected, not simply the first one.
+            errors = {current_upload: exc} if current_upload else {}
             return await self.show(record, raw, errors, self.t(exc.key, **exc.params))
         except records_repo.RecordError as exc:
             await self._discard(saved)
@@ -492,16 +498,19 @@ class EntityImportHandler(EntityHandler):
 
         def insert(conn):
             created, failed = 0, []
-            for i, values in enumerate(rows):
+            ids: list[int] = []
+            for lineno, values in rows:
                 try:
-                    records_repo.create_record(conn, ent, values, self.user)
+                    ids.append(records_repo.create_record(conn, ent, values, self.user))
                     created += 1
                 except records_repo.RecordError as exc:
-                    failed.extend((i + 2, k, v) for k, v in exc.errors.items())
-            return created, failed
+                    failed.extend((lineno, k, v) for k, v in exc.errors.items())
+            return created, failed, ids
 
-        created, failed = await self.db(insert)
-        errors += failed
+        created, failed, ids = await self.db(insert)
+        if ids:
+            self.state.publish(ent.name, ids)  # WebSocket clients see imported records too
+        errors = sorted(errors + failed, key=lambda e: e[0])
         await self.audit("import_csv", ent.name, f"{created} records")
         lines = [self.t("data.import_done", count=created)]
         for lineno, fname, err in errors[:50]:

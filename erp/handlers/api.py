@@ -24,6 +24,7 @@ from ..repo import entities as entities_repo
 from ..repo import files as files_repo
 from ..repo import records as records_repo
 from ..repo import settings as settings_repo
+from .files import content_disposition
 
 log = logging.getLogger("erp.api")
 MAX_BATCH = 1000
@@ -208,8 +209,10 @@ class RecordsHandler(ApiHandler):
     async def get(self, name: str) -> None:
         ent = await self.entity(name, write=False)
         limit = min(max(self.int_arg("limit", 100), 1), 1000)
-        offset = max(self.int_arg("offset", 0), 0)
+        offset = min(max(self.int_arg("offset", 0), 0), 2**62)
         since_id = self.get_argument("since_id", "")
+        # isdecimal() and the length limit keep int() and the 64 bit id column from failing.
+        since = int(since_id) if since_id.isdecimal() and len(since_id) <= 18 else None
         order = self.get_argument("order", "id")
         desc = self.get_argument("dir", "asc" if since_id else "desc") == "desc"
         filters = {}
@@ -224,7 +227,7 @@ class RecordsHandler(ApiHandler):
 
         def load(conn):
             rows = records_repo.list_records(conn, ent, search=q, order=order, desc=desc, limit=limit, offset=offset,
-                                             since_id=int(since_id) if since_id.isdigit() else None, filters=filters)
+                                             since_id=since, filters=filters)
             total = records_repo.count_records(conn, ent, search=q) if not filters and not since_id else None
             return rows, total
 
@@ -358,7 +361,8 @@ class FileDownloadHandler(ApiHandler):
         except OSError:
             raise ApiError(404, "not_found") from None
         self.set_header("Content-Type", row["mime_type"])
-        self.set_header("Content-Disposition", f'attachment; filename="{row["original_name"].encode("ascii", "replace").decode()}"')
+        # ASCII fallback plus the RFC 5987 UTF-8 name, so "Çizim.pdf" keeps its letters.
+        self.set_header("Content-Disposition", content_disposition("attachment", row["original_name"]))
         self.finish(data)
 
 

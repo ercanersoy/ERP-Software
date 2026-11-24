@@ -86,9 +86,13 @@ def _where(conn: Conn, ent: Entity, search: str | None, owner_id: int | None, si
             elif f.field_type in ("integer", "decimal", "currency", "date"):
                 parts.append(conn.dialect.like_sql(conn.dialect.cast_text_sql(conn.q(f.name))))
                 params.append(term)
-        if search.strip().isdigit():
+        # A purely numeric search also matches the record number.  isdecimal()
+        # (not isdigit(), which accepts "²" that int() rejects) and the range
+        # check keep int() and the database's 64 bit integers from failing.
+        digits = search.strip()
+        if digits.isdecimal() and int(digits) < 2**63:
             parts.append(f"{conn.q('id')} = ?")
-            params.append(int(search.strip()))
+            params.append(int(digits))
         conds.append("(" + (" OR ".join(parts) or "1 = 0") + ")")
     return (" WHERE " + " AND ".join(conds)) if conds else "", params
 
@@ -123,10 +127,16 @@ def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | N
     from . import files as files_repo
 
     errors: dict[str, ValidationError] = {}
+    # File ids given to more than one file field of this very record.
+    file_values = [values[f.name] for f in ent.fields if f.is_file and values.get(f.name) is not None]
+    repeated = {v for v in file_values if file_values.count(v) > 1}
     for f in ent.fields:
         if f.name not in values or values[f.name] is None:
             continue
         value = values[f.name]
+        if f.is_file and value in repeated:
+            errors[f.name] = ValidationError("error.file_in_use")
+            continue
         if f.is_unique:
             sql = f"SELECT COUNT(*) FROM {conn.q(ent.table)} WHERE {conn.q(f.name)} = ?"
             params = [value]
@@ -149,7 +159,33 @@ def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | N
                 errors[f.name] = ValidationError("error.file_missing")
             elif user is not None and user["role"] == "dealer" and row["created_by"] not in (None, user["id"]):
                 errors[f.name] = ValidationError("error.file_missing")
+            elif row["entity"] == ent.name and _file_used_elsewhere(conn, ent, f.name, value, record_id):
+                # Every stored file belongs to exactly one record: deleting or
+                # replacing it in one record would otherwise break the other.
+                errors[f.name] = ValidationError("error.file_in_use")
     return errors
+
+
+def _file_used_elsewhere(conn: Conn, ent: Entity, field_name: str, file_id: int, record_id: int | None) -> bool:
+    """True when another record of ``ent`` already references ``file_id`` in any file field."""
+    for f in ent.fields:
+        if not f.is_file:
+            continue
+        sql = f"SELECT COUNT(*) FROM {conn.q(ent.table)} WHERE {conn.q(f.name)} = ?"
+        params: list = [file_id]
+        if record_id is not None:
+            # The record being edited may keep its own file ...
+            sql += f" AND {conn.q('id')} <> ?"
+            params.append(record_id)
+        if conn.scalar(sql, params):
+            return True
+        if record_id is not None and f.name != field_name:
+            # ... but not reuse it in a second field of the same record.
+            same = conn.scalar(f"SELECT COUNT(*) FROM {conn.q(ent.table)} WHERE {conn.q('id')} = ? "
+                               f"AND {conn.q(f.name)} = ?", [record_id, file_id])
+            if same:
+                return True
+    return False
 
 
 def create_record(conn: Conn, ent: Entity, values: dict, user: dict | None = None,

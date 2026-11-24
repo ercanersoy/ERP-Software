@@ -238,7 +238,13 @@ class Field:
         if not value.is_finite():
             raise ValidationError("error.invalid_number")
         quant = decimal.Decimal(1).scaleb(-self.scale)
-        value = value.quantize(quant, rounding=decimal.ROUND_HALF_UP)
+        try:
+            value = value.quantize(quant, rounding=decimal.ROUND_HALF_UP)
+        except decimal.InvalidOperation:
+            # quantize() fails when the result needs more digits than the
+            # decimal context allows (e.g. "1E+30"); such a number can never
+            # fit into the DECIMAL column anyway.
+            raise ValidationError("error.number_too_large") from None
         precision = 19 if self.field_type == "currency" else 18
         if len(value.as_tuple().digits) > precision:
             raise ValidationError("error.number_too_large")

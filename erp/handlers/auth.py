@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+from ..fieldtypes import EMAIL_RE
 from ..i18n import LANGUAGES, get_locale
 from ..repo import users as users_repo
 from .base import LANG_COOKIE, SESSION_COOKIE, BaseHandler, FormField
@@ -95,7 +96,8 @@ class AccountHandler(BaseHandler):
             FormField("username", t("users.username"), "static", self.user["username"]),
             FormField("role", t("users.role"), "static", t(f"role.{self.user['role']}")),
             FormField("full_name", t("users.full_name"), "text", values.get("full_name", self.user.get("full_name") or "")),
-            FormField("email", t("users.email"), "email", values.get("email", self.user.get("email") or "")),
+            FormField("email", t("users.email"), "email", values.get("email", self.user.get("email") or ""),
+                      error=e("email")),
             FormField("language", t("account.language"), "select",
                       values.get("language", self.user.get("language") or self.loc.code),
                       options=list(LANGUAGES.items())),
@@ -119,6 +121,9 @@ class AccountHandler(BaseHandler):
         values = {k: self.get_argument(k, "") for k in ("full_name", "email", "language", "current_password",
                                                        "new_password", "new_password2")}
         errors: dict[str, str] = {}
+        email = values["email"].strip()
+        if email and (not EMAIL_RE.match(email) or len(email) > 200):
+            errors["email"] = "error.invalid_email"
         if values["new_password"]:
             if not users_repo.verify_password(values["current_password"], self.user["password_hash"]):
                 errors["current_password"] = "error.wrong_password"

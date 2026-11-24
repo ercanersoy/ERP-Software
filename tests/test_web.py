@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 from erp import config
@@ -235,3 +236,85 @@ class AppTests(WebTestCase):
         r = self.post("/data/orders/new", {"customer": "1"})
         self.assertIn("linked record does not exist", self.text(r))
         self.assertNotIn("Secret customer", self.text(r))
+
+
+class RegressionTests(WebTestCase):
+    """Bugs found in review; each test failed before its fix."""
+
+    def setUp(self):
+        super().setUp()
+        self.install()
+        self.login()
+
+    def test_odd_numbers_in_urls_and_forms_do_not_crash(self):
+        self.create_entity("items", "Items")
+        self.add_field("items", "name", "text")
+        self.add_field("items", "price", "decimal")
+        # ids that do not fit into 64 bits are simply "not found"
+        self.assertEqual(self.get("/data/items/99999999999999999999999").code, 404)
+        self.assertEqual(self.get("/menu/99999999999999999999999").code, 404)
+        # superscript digits pass str.isdigit() but not int()
+        self.assertEqual(self.get("/data/items?q=%C2%B2").code, 200)
+        self.assertEqual(self.get("/data/items?q=99999999999999999999999").code, 200)
+        r = self.post("/admin/settings", {"company_name": "X", "default_language": "en-US", "default_charset": "utf-8",
+                                          "timezone": "UTC", "default_currency": "TRY", "page_size": "²",
+                                          "session_hours": "8", "api_enabled": "1"})
+        self.assertEqual(r.code, 200)
+        self.assertIn("Invalid value", self.text(r))
+        r = self.post("/admin/menus/new", {"title": "M", "parent_id": "²", "sort_order": "0"})
+        self.assertEqual(r.code, 302)
+        r = self.post("/data/items/new", {"name": "Big", "price": "1E+30"})
+        self.assertEqual(r.code, 200)
+        self.assertIn("The number is too large", self.text(r))
+
+    def test_csv_import_reports_real_line_numbers(self):
+        self.create_entity("items", "Items")
+        self.add_field("items", "code", "text", is_unique="1")
+        self.add_field("items", "qty", "integer")
+        csv = "code;qty\r\nA;x\r\nB;1\r\nB;2\r\n".encode()
+        r = self.post("/data/items/import", {"charset": "utf-8", "delimiter": ";"},
+                      files={"file": ("c.csv", csv, "text/csv")})
+        body = self.text(r)
+        self.assertIn("1 records were imported", body)
+        self.assertRegex(body, r"[Ll]ine 2\b")   # "x" is not an integer
+        self.assertRegex(body, r"[Ll]ine 4\b")   # duplicate "B" (was reported as line 3)
+
+    def test_file_can_not_be_shared_between_records(self):
+        self.create_entity("people", "People")
+        self.add_field("people", "name", "text")
+        self.add_field("people", "photo", "image")
+        r = self.post("/data/people/new", {"name": "A"}, files={"photo": ("a.png", PNG, "image/png")})
+        self.assertEqual(r.code, 302)
+        file_id = re.search(r'src="/files/(\d+)"', self.text(self.get(r.headers["Location"]))).group(1)
+        r = self.post("/data/people/new", {"name": "B"})
+        self.assertEqual(r.code, 302)
+        # Give record 2 the file of record 1 through the API ...
+        token = self.create_api_key("k")
+        resp = self.fetch("/api/v1/entities/people/records/2", method="PATCH",
+                          body=json.dumps({"photo": int(file_id)}),
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+        self.assertEqual(resp.code, 422)
+        self.assertIn("file_in_use", resp.body.decode())
+        # ... record 1 keeps its picture.
+        self.assertEqual(self.get(f"/files/{file_id}").code, 200)
+
+    def test_invalid_email_rejected(self):
+        r = self.post("/account", {"full_name": "A", "email": "nope", "language": "en-US"})
+        self.assertIn("Not a valid e-mail address", self.text(r))
+        r = self.post("/admin/users/new", {"username": "u1", "email": "nope", "role": "user", "active": "1",
+                                           "password": "secret123"})
+        self.assertIn("Not a valid e-mail address", self.text(r))
+
+    def test_records_created_on_the_web_are_published(self):
+        self.create_entity("temps", "Temps", is_sensor="1")
+        self.add_field("temps", "celsius", "float")
+        seen = []
+
+        class Sub:
+            async def push(self, ids):
+                seen.extend(ids)
+
+        self.state.subscribe("temps", Sub())
+        self.post("/data/temps/new", {"celsius": "20"})
+        self.io_loop.run_sync(lambda: None)
+        self.assertEqual(seen, [1])

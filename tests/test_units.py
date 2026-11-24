@@ -25,6 +25,11 @@ class FieldTypeTests(unittest.TestCase):
             f.parse("abc")
         with self.assertRaises(ValidationError):
             f.parse("NaN")
+        # Too many digits for the decimal context used to raise InvalidOperation (HTTP 500).
+        for raw in ("1E+30", "123456789012345678901234567890"):
+            with self.assertRaises(ValidationError) as ctx:
+                f.parse(raw)
+            self.assertEqual(ctx.exception.key, "error.number_too_large")
 
     def test_other_types(self):
         self.assertEqual(Field(None, None, "d", "D", "date").parse("31.01.2026"), dt.date(2026, 1, 31))
