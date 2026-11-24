@@ -12,6 +12,7 @@ ERP-Software; Python 3.13+ ve Tornado ile yazılmış, sade ve klavyeyle kolayca
 - **Karakter kümeleri**: UTF-8, ASCII, DOS 437, DOS 857, Windows-1254 ve diğerleri.
 - **Arayüz dilleri**: Türkiye Türkçesi, Amerikan İngilizcesi, İngiliz İngilizcesi.
 - **Sade görünüm**: yalnızca web güvenli renkler ve web güvenli yazı aileleri.
+- **Dokunmatik ekranlar**: tablet, telefon ve dokunmatik terminallerde büyük dokunma alanları, geri düğmesi, kaydedilmemiş değişiklik uyarısı.
 
 Hızlı başlangıç:
 
@@ -29,11 +30,13 @@ pip install -r requirements.txt pytest
 python3 -m pytest
 ```
 
-Testler SQLite kullanır. Başka bir veri tabanı sisteminde çalıştırmak için `ERP_TEST_DB` değişkenini boş bir test veri tabanına yöneltin, örneğin:
+Testler varsayılan olarak SQLite kullanır ve PostgreSQL üzerinde de geçer. Başka bir veri tabanı sisteminde çalıştırmak için `ERP_TEST_DB` değişkenini boş bir test veri tabanına yöneltin (PostgreSQL için `ENCODING 'UTF8'` ile oluşturun), örneğin:
 
 ```
 ERP_TEST_DB='{"db_dialect": "postgresql", "db_host": "127.0.0.1", "db_name": "erp_test", "db_user": "erp", "db_password": "secret"}' python3 -m pytest
 ```
+
+Sürüm değişiklikleri: [CHANGELOG.md](CHANGELOG.md).
 
 Proje yapısı:
 
@@ -43,6 +46,7 @@ Proje yapısı:
 | `erp/db/` | Veri tabanı katmanı ve SQL lehçeleri |
 | `erp/repo/` | Veri erişimi (kullanıcılar, menüler, veri ekranları, kayıtlar, dosyalar, API anahtarları, işlem günlüğü) |
 | `erp/handlers/` | Web ekranları, REST API ve WebSocket |
+| `erp/schema.py` | Sistem tabloları ve şema sürümü geçişleri |
 | `erp/backup.py` | SQL/TOML/CSV dışa aktarma, içe aktarma ve geri yükleme |
 | `erp/locales/` | Arayüz metinleri (tr-TR, en-US, en-GB) |
 | `erp/templates/`, `erp/static/` | HTML şablonları, stil dosyası, klavye betiği |

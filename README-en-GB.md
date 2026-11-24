@@ -12,6 +12,7 @@ ERP-Software is a simple, keyboard-friendly, web-based ERP system written in Pyt
 - **Character sets**: UTF-8, ASCII, DOS 437, DOS 857, Windows-1254 and more.
 - **Interface languages**: Turkish (Türkiye), English (US), English (UK).
 - **Plain look**: only web-safe colours and web-safe font families.
+- **Touch screens**: large touch targets, a back button and a warning before unsaved input is lost, on tablets, phones and touch terminals.
 
 Quick start:
 
@@ -29,11 +30,13 @@ pip install -r requirements.txt pytest
 python3 -m pytest
 ```
 
-The tests use SQLite. To run them against another database system, point `ERP_TEST_DB` at an empty test database, for example:
+The tests use SQLite by default and also pass on PostgreSQL. To run them against another database system, point `ERP_TEST_DB` at an empty test database (for PostgreSQL create it with `ENCODING 'UTF8'`), for example:
 
 ```
 ERP_TEST_DB='{"db_dialect": "postgresql", "db_host": "127.0.0.1", "db_name": "erp_test", "db_user": "erp", "db_password": "secret"}' python3 -m pytest
 ```
+
+Changes between versions: [CHANGELOG.md](CHANGELOG.md).
 
 Project layout:
 
@@ -43,6 +46,7 @@ Project layout:
 | `erp/db/` | Database layer and SQL dialects |
 | `erp/repo/` | Data access (users, menus, entities, records, files, API keys, audit log) |
 | `erp/handlers/` | Web screens, REST API and WebSocket |
+| `erp/schema.py` | System tables and schema version migrations |
 | `erp/backup.py` | SQL/TOML/CSV export, import and restore |
 | `erp/locales/` | Interface texts (tr-TR, en-US, en-GB) |
 | `erp/templates/`, `erp/static/` | HTML templates, style sheet, keyboard script |

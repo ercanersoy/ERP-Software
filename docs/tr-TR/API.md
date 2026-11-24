@@ -40,6 +40,8 @@ veya `X-API-Key: erp_1a2b3c4d_...`. Canlı kullanımda HTTPS kullanın (bkz. [Ve
 
 `GET .../records` parametreleri: `limit` (1-1000, varsayılan 100), `offset`, `since_id` (yalnızca daha yeni kayıtlar, eskiden yeniye), `order` (bir alan adı, `id`, `created_at` veya `updated_at`), `dir` (`asc`/`desc`), `q` (arama) ve tam eşleşme süzgeçleri için `<alan>=<değer>`.
 
+Boş bir süzgeç değeri (`?musteri=`) alanı boş olan kayıtları bulur. Ondalık ve para alanlarına göre sıralama sayısaldır.
+
 ## Değerler
 
 | Alan türü | JSON değeri |
@@ -54,6 +56,8 @@ veya `X-API-Key: erp_1a2b3c4d_...`. Canlı kullanımda HTTPS kullanın (bkz. [Ve
 | Belge, resim, video | `POST /api/v1/files` ile alınan dosya kimliği |
 
 Her kaydın ayrıca `id`, `created_at`, `updated_at`, `created_by` ve `api_key_id` alanları vardır.
+
+Ondalık sayılar ondalık basamaklar dahil en fazla 18 basamak (para tutarları 19) tutar ve her zaman bütün ondalık basamaklarıyla metin olarak döner, örneğin `"1500.0000"`. Daha büyük sayılar `number_too_large` ile reddedilir. Bir dosya kimliği yalnızca tek bir kayıtta kullanılabilir; ikinci bir kayıtta kullanmak `file_in_use` ile reddedilir. İndirilen dosyalar Türkçe harfler dahil özgün adlarını korur.
 
 ## Örnekler
 
@@ -98,8 +102,8 @@ Hatalar `{"error": "kod", "message": "...", "details": {...}}` biçimindedir.
 | 401 | Eksik, yanlış, süresi dolmuş veya izin verilmeyen anahtar (ya da yanlış IP adresi) |
 | 403 | Anahtar bu veri ekranını okuyamaz veya yazamaz |
 | 404 | Bilinmeyen veri ekranı veya kayıt |
-| 422 | Doğrulama başarısız; `details` alanları adlandırır (`required`, `invalid_number`, `not_unique`, `unknown_field`, ...) |
-| 429 | Anahtarın en kısa süresinden daha sık; `Retry-After` başlığına bakın |
+| 422 | Doğrulama başarısız; `details` alanları adlandırır (`required`, `invalid_number`, `number_too_large`, `too_long`, `not_unique`, `file_in_use`, `unknown_field`, ...) |
+| 429 | Anahtarın en kısa süresinden daha sık; `Retry-After` başlığına bakın. Reddedilen istekler (400, 422) sayılmaz, düzeltilen değerler hemen yeniden gönderilebilir |
 | 503 | API kapalı |
 
 ## Sensörler: ayarlanabilir okuma süresi
@@ -140,7 +144,7 @@ while True:
 - Bağlanınca sunucu `{"event": "hello", "read_interval_ms": 1000, ...}` gönderir.
 - Kayıt saklamak için bir JSON nesnesi veya dizisi gönderin; yanıt `{"event": "stored", "ids": [...]}` olur.
 - Geçerli okuma süresini almak için `{"event": "config"}` gönderin.
-- Okuma izni olan anahtarlar veri ekranının her yeni kaydını alır: `{"event": "created", "records": [...]}` (REST ile oluşturulanlar da).
+- Okuma izni olan anahtarlar veri ekranının her yeni kaydını alır: `{"event": "created", "records": [...]}` (REST ile, web formlarında veya CSV içe aktarmayla oluşturulanlar da).
 - Hatalar: `{"event": "error", "error": "...", "details": {...}}`.
 
 Web arayüzündeki canlı izleme ekranı (sensör ekranı listesinde `m`) okuma süresiyle yenilenir.

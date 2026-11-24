@@ -40,6 +40,8 @@ or `X-API-Key: erp_1a2b3c4d_...`. Use HTTPS in live operation (see [Database sys
 
 Parameters of `GET .../records`: `limit` (1-1000, default 100), `offset`, `since_id` (only newer records, oldest first), `order` (a field name, `id`, `created_at` or `updated_at`), `dir` (`asc`/`desc`), `q` (search) and `<field>=<value>` filters for exact matches.
 
+An empty filter value (`?customer=`) finds the records in which the field has no value. Sorting by a decimal or currency field is numeric.
+
 ## Values
 
 | Field type | JSON value |
@@ -54,6 +56,8 @@ Parameters of `GET .../records`: `limit` (1-1000, default 100), `offset`, `since
 | Document, image, video | file id from `POST /api/v1/files` |
 
 Every record also has `id`, `created_at`, `updated_at`, `created_by` and `api_key_id`.
+
+Decimal numbers keep up to 18 digits (currency amounts 19) including the decimal places and are always returned as strings with all decimal places, for example `"1500.0000"`. Larger numbers are refused with `number_too_large`. A file id can be used in one record only; using it in a second record is refused with `file_in_use`. Downloaded files keep their original name, also with non-ASCII letters.
 
 ## Examples
 
@@ -98,8 +102,8 @@ Errors have the form `{"error": "code", "message": "...", "details": {...}}`.
 | 401 | Missing, wrong, expired or not allowed key (or wrong IP address) |
 | 403 | The key may not read or write this data screen |
 | 404 | Unknown data screen or record |
-| 422 | Validation failed; `details` names the fields (`required`, `invalid_number`, `not_unique`, `unknown_field`, ...) |
-| 429 | Faster than the minimum interval of the key; see the `Retry-After` header |
+| 422 | Validation failed; `details` names the fields (`required`, `invalid_number`, `number_too_large`, `too_long`, `not_unique`, `file_in_use`, `unknown_field`, ...) |
+| 429 | Faster than the minimum interval of the key; see the `Retry-After` header. Rejected requests (400, 422) do not count, so corrected values can be sent again at once |
 | 503 | API switched off |
 
 ## Sensors: adjustable reading interval
@@ -140,7 +144,7 @@ while True:
 - On connect the server sends `{"event": "hello", "read_interval_ms": 1000, ...}`.
 - Send a JSON object or array to store records; the answer is `{"event": "stored", "ids": [...]}`.
 - Send `{"event": "config"}` to get the current reading interval.
-- Keys with read permission receive every new record of the data screen: `{"event": "created", "records": [...]}` (also those created through REST).
+- Keys with read permission receive every new record of the data screen: `{"event": "created", "records": [...]}` (also those created through REST, in the web forms or by CSV import).
 - Errors: `{"event": "error", "error": "...", "details": {...}}`.
 
 The live monitor in the web interface (`m` in the list of a sensor screen) refreshes at the reading interval.

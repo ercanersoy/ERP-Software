@@ -113,6 +113,8 @@ Field types:
 
 Further options: required, unique, show in list, default value, help text and order. The type, the technical name and storage relevant settings can not be changed after creation; delete the field and create it again instead (its values are lost).
 
+Titles and labels may have up to 200 characters, default values and each choice up to 255, help texts up to 500.
+
 Settings of a data screen: menu, access for users and dealers, title field (shown when other screens link to a record), sensor/live data, reading interval and rows per page.
 
 ## Menus
@@ -124,6 +126,7 @@ Under **Administration › Menus** you build menu groups and sub-menus (for exam
 - **List**: search with `/`, sort by clicking a column header, page with `PgUp`/`PgDn`, open a row with `Enter`.
 - **New** (`n`), **Edit** (`e`), **Delete** (`Del`). “Save and new” keeps entering records quickly.
 - **Files**: documents (PDF, office documents, text, CSV, XML, JSON, ZIP, 7z), images (PNG, JPEG, GIF, WebP, BMP) and videos (MP4, WebM, Ogg, QuickTime). Images and videos are checked by their content and shown in the record; videos can be played and seeked.
+- A stored file belongs to exactly one record; deleting the record or removing the file from it deletes the file.
 - **Export** (`x`): CSV, TOML or SQL in any supported character set.
 - **Import CSV** (`i`): the first line contains the technical field names; numbers may use `,` or `.` as decimal separator.
 

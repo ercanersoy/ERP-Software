@@ -113,6 +113,8 @@ Alan türleri:
 
 Diğer seçenekler: zorunlu, benzersiz, listede göster, varsayılan değer, yardım metni ve sıra. Tür, teknik ad ve saklamayla ilgili ayarlar oluşturulduktan sonra değiştirilemez; bunun yerine alanı silip yeniden oluşturun (değerleri silinir).
 
+Başlık ve etiketler en fazla 200, varsayılan değerler ve her seçenek en fazla 255, yardım metinleri en fazla 500 karakter olabilir.
+
 Veri ekranı ayarları: menü, normal kullanıcı ve bayi erişimi, başlık alanı (başka ekranlar bir kayda bağlandığında gösterilir), sensör/canlı veri, okuma süresi ve sayfa başına satır.
 
 ## Menüler
@@ -124,6 +126,7 @@ Veri ekranı ayarları: menü, normal kullanıcı ve bayi erişimi, başlık ala
 - **Liste**: `/` ile arayın, sütun başlığına tıklayarak sıralayın, `PgUp`/`PgDn` ile sayfa değiştirin, `Enter` ile satırı açın.
 - **Yeni** (`n`), **Düzenle** (`e`), **Sil** (`Del`). “Kaydet ve yeni” ile hızlıca art arda kayıt girilir.
 - **Dosyalar**: belgeler (PDF, ofis belgeleri, metin, CSV, XML, JSON, ZIP, 7z), resimler (PNG, JPEG, GIF, WebP, BMP) ve videolar (MP4, WebM, Ogg, QuickTime). Resim ve videolar içeriklerine göre denetlenir ve kayıtta gösterilir; videolar oynatılabilir ve ileri-geri sarılabilir.
+- Saklanan bir dosya tam olarak bir kayda aittir; kaydı silmek veya dosyayı kayıttan kaldırmak dosyayı siler.
 - **Dışa aktar** (`x`): desteklenen her karakter kümesinde CSV, TOML veya SQL.
 - **CSV içe aktar** (`i`): ilk satır teknik alan adlarını içerir; sayılarda ondalık ayırıcı olarak `,` veya `.` kullanılabilir.
 

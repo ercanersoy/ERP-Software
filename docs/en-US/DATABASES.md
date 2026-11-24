@@ -10,6 +10,8 @@
 | Microsoft SQL Server 2016+ | `pyodbc` (with the Microsoft ODBC driver) or `pymssql` | Texts are stored as NVARCHAR (Unicode) |
 | PostgreSQL 12+ | `psycopg` (3) or `psycopg2` | |
 
+The automated tests run on SQLite and PostgreSQL.
+
 Choose the system in the setup wizard. Create an **empty database** and a user with the right to create tables first.
 
 MySQL / MariaDB:
@@ -25,6 +27,13 @@ PostgreSQL:
 ```
 CREATE USER erp WITH PASSWORD 'a-strong-password';
 CREATE DATABASE erp OWNER erp ENCODING 'UTF8';
+```
+
+The database must use the **UTF8** encoding. If the server's template database uses another encoding (for example SQL_ASCII on servers set up with the C or POSIX locale), add `TEMPLATE template0` to the CREATE DATABASE statement. The setup wizard's **Test connection** warns when the encoding is not UTF8: in such databases searches for letters such as Ç, Ğ, İ, Ö, Ş and Ü do not ignore case. The locale (LC_COLLATE, LC_CTYPE) does not matter; searches ignore case with every locale, also with C.
+
+```
+-- if template1 is not UTF8:
+CREATE DATABASE erp OWNER erp ENCODING 'UTF8' TEMPLATE template0;
 ```
 
 Microsoft SQL Server:
@@ -44,6 +53,8 @@ For SQL Server install the “ODBC Driver 18 for SQL Server” and `pip install 
 - System tables start with `erp_` (`erp_users`, `erp_entities`, `erp_fields`, `erp_settings`, ...).
 - Every data screen has its own table `d_<name>` with the columns `id`, `created_at`, `updated_at`, `created_by`, `updated_by`, `api_key_id` and one column per field. Adding or deleting a field changes the table. The data can therefore also be read with ordinary SQL and reporting tools.
 - Times are stored in UTC.
+- Decimal and currency values are stored exactly (DECIMAL columns; in SQLite as text, which is sorted numerically).
+- Texts of the data definitions have fixed maximum lengths: titles and labels 200 characters, default values and choice options 255, help texts 500. The forms check them, so no database system refuses a value.
 - Uploaded files are stored in the upload directory; the table `erp_files` describes them.
 
 ## The configuration file
@@ -99,6 +110,15 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
+## Updates
+
+When the program starts, it brings the database up to the current schema version automatically. Take a full backup before installing a new version.
+
+| Schema version | Change |
+|---|---|
+| 1 | First release |
+| 2 | SQLite only: decimal and currency columns are converted to exact storage (digits that were already rounded can not be restored) |
+
 ## Security
 
 - Passwords: scrypt hashes; sessions: random tokens stored as SHA-256 hashes, signed cookies (HttpOnly, SameSite).
@@ -106,3 +126,5 @@ WantedBy=multi-user.target
 - Pages send a strict Content Security Policy; uploaded images and videos are checked by their content.
 - API keys are stored as SHA-256 hashes and can be limited by data screen, rights, IP network, interval and expiry date.
 - Login attempts are limited.
+- Uploaded files are delivered with their own sandboxing Content Security Policy, documents always as downloads.
+- Addresses to return to after the login are checked, so links can not lead users to other sites.
