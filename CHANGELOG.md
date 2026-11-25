@@ -53,6 +53,24 @@ The test suite now runs on SQLite and PostgreSQL (`ERP_TEST_DB`).
 - Importing data formats into an existing installation failed when a new
   link field pointed to a data screen created by the same import.
 
+### Fixed – editing, import and validation (third review)
+
+- Editing a record silently erased a choice value whose option had been
+  removed later; such values are now shown as "no longer offered" and kept.
+- Editing a record silently removed a link to a record beyond the first
+  1000 records of the linked data screen.
+- Date-times with an invalid time ("2026-01-31 25:00") were saved as
+  midnight instead of being refused.
+- "-0" was stored as "-0.00", which differs from "0.00" in unique checks and
+  filters.
+- An administrator changing their own password in the user form was logged
+  out.
+- Appending a data export (e.g. twice, or into another installation) attached
+  one stored file to several records, or linked records to an unrelated file
+  with the same id. Files are now renumbered or copied as needed.
+- A table change refused by the database (e.g. MySQL's row size limit for
+  many long text fields) showed an HTTP 500 page instead of a message.
+
 ### Added – usability and touch screens
 
 - Touch screens: touch targets of at least 44 px, no zoom on input focus,

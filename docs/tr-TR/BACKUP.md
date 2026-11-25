@@ -66,7 +66,7 @@ Eksik değerler NULL anlamına gelir. Ondalık ve para değerleri tam kalmaları
 
 - **Yapılandırma**: ayarları ve menüleri değiştirir; eksik veri ekranlarını ve alanları oluşturur, var olanları günceller. Mevcut veriler korunur.
 - **Veri biçimleri**: eksik veri ekranlarını ve alanları oluşturur, var olanları günceller. Yeni veri ekranları önce oluşturulur; böylece var olan ekranların yeni bağlantı alanları onlara bağlanabilir.
-- **Veriler**: “Kayıtları ekle” kayıtları yeni kimliklerle ekler; “Değiştir” dosyadaki veri ekranlarının kayıtlarını siler ve özgün kimlikleriyle geri yükler. Geçerli tanıma uymayan satırlar atlanır.
+- **Veriler**: “Kayıtları ekle” kayıtları yeni kimliklerle ekler; “Değiştir” dosyadaki veri ekranlarının kayıtlarını siler ve özgün kimlikleriyle geri yükler. Geçerli tanıma uymayan satırlar atlanır. Her dosya tek bir kayda bağlı kalır: bu kurulumda zaten kullanılan bir dosya kopyalanır, kimliği burada başka bir dosyaya ait olan bir dosya yeni bir kimlik alır.
 - **Tam yedek**: “Bütün veri tabanını değiştir” kutusu işaretlendikten sonra mevcut BÜTÜN içerik değiştirilir. Herkesin oturumu kapanır; yedekteki bir hesapla giriş yapın. Herhangi bir şey silinmeden önce dosyanın tamamı denetlenir; geçersiz bir veri tanımı içeriyorsa mevcut veri tabanı değişmeden kalır.
 
 Karakter kümesi `charset:` açıklamasından okunur; elle de seçilebilir. Her içe aktarmadan önce yedek alın.

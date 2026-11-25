@@ -79,6 +79,7 @@ image = "Resim"
 video = "Video"
 
 [error]
+database = "Veri tabanı değişikliği kabul etmedi: {error}"
 title = "Hata"
 required = "Bu alan zorunludur."
 too_long = "Çok uzun (en fazla {max} karakter)."
@@ -373,6 +374,7 @@ cleanup_confirm = "24 saatten eski olup hiçbir kayıtta kullanılmayan yüklenm
 cleanup_done = "Kullanılmayan {count} dosya silindi."
 
 [data]
+old_choice = "artık sunulmuyor"
 monitor = "Canlı izleme"
 export = "Dışa aktar"
 import_csv = "CSV içe aktar"

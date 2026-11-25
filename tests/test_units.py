@@ -31,6 +31,19 @@ class FieldTypeTests(unittest.TestCase):
                 f.parse(raw)
             self.assertEqual(ctx.exception.key, "error.number_too_large")
 
+    def test_invalid_times_are_not_midnight(self):
+        f = Field(None, None, "t", "T", "datetime")
+        for raw in ("2026-01-31 25:00", "2026-01-31 garbage", "31.01.2026 99:99"):
+            with self.assertRaises(ValidationError):
+                f.parse(raw)
+        self.assertEqual(f.parse("31.01.2026"), dt.datetime(2026, 1, 31))
+
+    def test_negative_zero_is_zero(self):
+        f = Field(None, None, "d", "D", "decimal")
+        self.assertEqual(str(f.parse("-0")), "0.00")
+        self.assertEqual(str(f.parse("-0,001")), "0.00")
+        self.assertEqual(str(f.parse("-0.005")), "-0.01")
+
     def test_other_types(self):
         self.assertEqual(Field(None, None, "d", "D", "date").parse("31.01.2026"), dt.date(2026, 1, 31))
         self.assertEqual(Field(None, None, "t", "T", "datetime").parse("2026-01-31T10:00:00+03:00"),

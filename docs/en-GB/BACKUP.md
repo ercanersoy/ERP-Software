@@ -66,7 +66,7 @@ Missing values mean NULL. Decimal and currency values are written as strings to 
 
 - **Configuration**: replaces settings and menus; creates missing data screens and fields and updates existing ones. Existing data is kept.
 - **Data formats**: creates missing data screens and fields and updates existing ones. New data screens are created first, so new link fields of existing screens can point to them.
-- **Data**: “Append records” adds the records with new ids; “Replace” deletes the records of the data screens in the file and restores them with their original ids. Rows that do not fit the current definition are skipped.
+- **Data**: “Append records” adds the records with new ids; “Replace” deletes the records of the data screens in the file and restores them with their original ids. Rows that do not fit the current definition are skipped. Each file stays attached to one record: a file that is already used in this installation is copied, and a file whose id belongs to a different file here gets a new id.
 - **Full backup**: after ticking “Replace the whole database”, ALL current content is replaced. Everybody is logged out; log in with an account from the backup. The whole file is checked before anything is deleted; if it contains an invalid data definition, the current database stays unchanged.
 
 The character set is read from the `charset:` comment; it can also be chosen by hand. Take a backup before every import.

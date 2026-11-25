@@ -115,6 +115,8 @@ Diğer seçenekler: zorunlu, benzersiz, listede göster, varsayılan değer, yar
 
 Başlık ve etiketler en fazla 200, varsayılan değerler ve her seçenek en fazla 255, yardım metinleri en fazla 500 karakter olabilir.
 
+Bir seçenek sonradan kaldırılırsa kayıtlar değerini korur: düzenleme formunda “artık sunulmuyor” olarak gösterilir ve değiştirilmeden bırakılabilir, ancak başka kayıtlar için seçilemez.
+
 Veri ekranı ayarları: menü, normal kullanıcı ve bayi erişimi, başlık alanı (başka ekranlar bir kayda bağlandığında gösterilir), sensör/canlı veri, okuma süresi ve sayfa başına satır.
 
 ## Menüler

@@ -275,6 +275,11 @@ class Field:
             # decimal context allows (e.g. "1E+30"); such a number can never
             # fit into the DECIMAL column anyway.
             raise ValidationError("error.number_too_large") from None
+        if value.is_zero():
+            # "-0" (also "-0,001" rounded) would be stored as "-0.00", which
+            # differs from "0.00" for text comparisons (unique checks, filters,
+            # SQLite's exact text storage).
+            value = value.copy_abs()
         precision = 19 if self.field_type == "currency" else 18
         if len(value.as_tuple().digits) > precision:
             raise ValidationError("error.number_too_large")
@@ -395,6 +400,12 @@ def parse_datetime(text: str) -> dt.datetime:
             except ValueError:
                 continue
         if value is None:
+            # A plain date means midnight.  Text with a time part that none of
+            # the formats accepted ("2026-01-31 25:00") is an error: parse_date
+            # only looks at the first 10 characters and would silently turn it
+            # into midnight.
+            if re.search(r"[\sT]", text):
+                raise ValidationError("error.invalid_datetime")
             try:
                 d = parse_date(text)
             except ValidationError:

@@ -79,6 +79,7 @@ image = "Image"
 video = "Video"
 
 [error]
+database = "The database refused the change: {error}"
 title = "Error"
 required = "This field is required."
 too_long = "Too long (at most {max} characters)."
@@ -373,6 +374,7 @@ cleanup_confirm = "Delete uploaded files that are older than 24 hours and not us
 cleanup_done = "{count} unused files were deleted."
 
 [data]
+old_choice = "no longer offered"
 monitor = "Live monitor"
 export = "Export"
 import_csv = "Import CSV"

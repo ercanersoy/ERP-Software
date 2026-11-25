@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import decimal
 
@@ -206,6 +207,16 @@ class RecordFormHandler(EntityHandler):
                         rows = records_repo.list_records(conn, target, limit=1000, desc=False, owner_id=owner) \
                             if target.can_read(self.user) else []
                         options[f.name] = [(r["id"], target.record_title(r)) for r in rows]
+                        # The list holds at most 1000 records.  The record that is
+                        # linked now (or was chosen before a validation error) must
+                        # be offered too, else saving would silently drop the link.
+                        offered = {i for i, _ in options[f.name]}
+                        wanted = raw.get(f.name) if f.name in raw else (record or {}).get(f.name)
+                        wanted = int(wanted) if str(wanted or "").isdecimal() and len(str(wanted)) <= 18 else None
+                        if wanted is not None and wanted not in offered and target.can_read(self.user):
+                            linked = records_repo.get_record(conn, target, wanted)
+                            if linked is not None and owner in (None, linked["created_by"]):
+                                options[f.name].append((linked["id"], target.record_title(linked)))
             file_ids = {record[f.name] for f in ent.fields if f.is_file and record and record.get(f.name)}
             return options, files_repo.get_files(conn, file_ids)
 
@@ -243,6 +254,12 @@ class RecordFormHandler(EntityHandler):
                 case "choice":
                     ff.type = "select"
                     ff.options = [("", "—")] + [(c, c) for c in f.choices]
+                    # A stored value whose choice was removed later is still shown
+                    # (and may be kept unchanged, see post()); without it the
+                    # browser would select "—" and saving would erase the value.
+                    old_choice = record.get(f.name) if record else None
+                    if old_choice and old_choice not in f.choices:
+                        ff.options.append((old_choice, f"{old_choice} ({self.t('data.old_choice')})"))
                 case "reference":
                     ff.type = "select"
                     ff.options = [("", "—")] + [(str(i), lbl) for i, lbl in options.get(f.name, [])]
@@ -334,7 +351,15 @@ class RecordFormHandler(EntityHandler):
             else:
                 raw[f.name] = self.get_argument(f.name, "")
         # Field values are converted and checked first; file fields are handled separately below.
-        values, errors = records_repo.validate(ent, raw, partial=False)
+        # A choice value that is no longer offered may be kept unchanged.
+        check = ent
+        legacy = {f.name for f in ent.fields if f.field_type == "choice" and record and record.get(f.name)
+                  and record[f.name] not in f.choices and raw.get(f.name) == record[f.name]}
+        if legacy:
+            check = dataclasses.replace(ent, fields=[
+                dataclasses.replace(f, options=(f.options or "") + "\n" + record[f.name]) if f.name in legacy else f
+                for f in ent.fields])
+        values, errors = records_repo.validate(check, raw, partial=False)
         # Files: keep, replace or remove.
         uploads: dict[str, dict] = {}
         for f in ent.fields:

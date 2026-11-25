@@ -390,3 +390,76 @@ class LimitTests(WebTestCase):
     def test_deleting_missing_items_is_not_found(self):
         self.assertEqual(self.post("/admin/menus/42/delete").code, 404)
         self.assertEqual(self.post("/admin/apikeys/42/delete").code, 404)
+
+
+class RoundTripTests(WebTestCase):
+    """Editing a record must not change values the user did not touch (third review)."""
+
+    def setUp(self):
+        super().setUp()
+        self.install()
+        self.login()
+
+    def test_removed_choice_survives_editing_other_fields(self):
+        self.create_entity("c", "C")
+        self.add_field("c", "name", "text")
+        self.add_field("c", "kind", "choice", options="Retail\nWholesale")
+        self.post("/data/c/new", {"name": "A", "kind": "Wholesale"})
+        self.post("/admin/entities/c/fields/kind", {"label": "Kind", "options": "Retail", "currency": "",
+                                                    "default_value": "", "help_text": "", "sort_order": "",
+                                                    "show_in_list": "1"})
+        form = self.text(self.get("/data/c/1/edit"))
+        self.assertIn('<option value="Wholesale" selected>', form)
+        r = self.post("/data/c/1/edit", {"name": "B", "kind": "Wholesale"})
+        self.assertEqual(r.code, 302, self.text(r))
+        self.assertIn("Wholesale", self.text(self.get("/data/c/1")))
+        # choosing a removed value for another record is still refused
+        r = self.post("/data/c/new", {"name": "C", "kind": "Wholesale"})
+        self.assertIn("Not one of the allowed choices", self.text(r))
+
+    def test_link_beyond_first_1000_records_is_kept(self):
+        self.create_entity("t", "T")
+        self.add_field("t", "n", "text")
+
+        def fill(conn):
+            for i in range(1005):
+                conn.insert("d_t", {"n": f"r{i}"})
+
+        self.state.db.run_sync(fill)
+        self.create_entity("o", "O")
+        self.add_field("o", "ref", "reference", ref_entity="t")
+        self.post("/data/o/new", {"ref": "1005"})
+        self.assertIn('<option value="1005" selected>r1004</option>', self.text(self.get("/data/o/1/edit")))
+
+    def test_admin_keeps_session_after_changing_own_password(self):
+        r = self.post("/admin/users/1", {"full_name": "A", "email": "", "role": "admin", "language": "",
+                                         "active": "1", "password": "newsecret1"})
+        self.assertEqual(r.code, 302)
+        self.assertEqual(self.get("/admin").code, 200)
+        self.post("/logout")
+        self.login("admin", "newsecret1")
+
+    def test_appending_a_data_export_twice_does_not_share_files(self):
+        self.create_entity("p", "P")
+        self.add_field("p", "name", "text")
+        self.add_field("p", "photo", "image")
+        self.post("/data/p/new", {"name": "A"}, files={"photo": ("a.png", PNG, "image/png")})
+        data = self.post("/admin/backup/data", {"format": "toml", "charset": "utf-8", "entities": ["p"],
+                                                "include_files": "1"}).body
+        self.post("/admin/restore", {"charset": "", "mode": "append"}, files={"file": ("d.toml", data, "text/plain")})
+        rows = self.state.db.run_sync(lambda c: c.all('SELECT "id", "photo" FROM "d_p" ORDER BY "id"'))
+        self.assertEqual(len(rows), 2)
+        self.assertNotEqual(rows[0]["photo"], rows[1]["photo"])
+        self.assertEqual(self.get(f"/files/{rows[1]['photo']}").body, PNG)
+        self.post("/data/p/2/delete")
+        self.assertEqual(self.get(f"/files/{rows[0]['photo']}").body, PNG)
+
+    def test_database_refusal_is_shown_on_the_form(self):
+        self.create_entity("z", "Z")
+        self.state.db.run_sync(lambda c: c.execute('ALTER TABLE "d_z" ADD COLUMN "dup" TEXT').close())
+        r = self.post("/admin/entities/z/fields/new", {"name": "dup", "label": "Dup", "field_type": "text",
+                                                       "max_length": "255", "decimal_places": "", "ref_entity": "",
+                                                       "currency": "TRY", "options": "", "default_value": "",
+                                                       "help_text": "", "sort_order": ""})
+        self.assertEqual(r.code, 200)
+        self.assertIn("The database refused the change", self.text(r))

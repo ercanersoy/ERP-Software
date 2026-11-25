@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import platform
 import sys
 
@@ -25,6 +26,8 @@ from ..repo import users as users_repo
 from .base import BaseHandler, FormField, page_window
 from .data import send_download
 from .setup import common_timezones
+
+log = logging.getLogger("erp.admin")
 
 
 class AdminHandler(BaseHandler):
@@ -217,6 +220,9 @@ class EntityFormHandler(AdminHandler):
                 await self.audit("entity_update", target.name)
         except ValidationError as exc:
             return self.show(ent, menus, values, {"name": exc}, self.t(exc.key, **exc.params))
+        except Exception as exc:  # noqa: BLE001 - the database refused CREATE TABLE (rolled back)
+            log.warning("entity %s not saved: %s", target.name, exc)
+            return self.show(ent, menus, values, {}, self.t("error.database", error=str(exc)))
         self.flash(self.t("common.saved"))
         self.redirect(f"/admin/entities/{target.name}")
 
@@ -397,6 +403,11 @@ class FieldFormHandler(AdminHandler):
                 "error.options_required": "options", "error.reference_required": "ref_entity",
                 "error.invalid_length": "max_length", "error.invalid_value": "name"}.get(exc.key, "default_value")
             return self.show(ent, f, all_entities, values, {key: exc}, self.t(exc.key, **exc.params))
+        except Exception as exc:  # noqa: BLE001 - e.g. MySQL's row size limit for many long text fields
+            # The database refused the table change (the transaction was rolled
+            # back, nothing changed): tell the administrator instead of a 500 page.
+            log.warning("field %s.%s not saved: %s", ent.name, target.name, exc)
+            return self.show(ent, f, all_entities, values, {}, self.t("error.database", error=str(exc)))
         self.flash(self.t("common.saved"))
         self.redirect(f"/admin/entities/{ent.name}")
 
@@ -656,6 +667,14 @@ class UserFormHandler(AdminHandler):
                 await self.db(lambda conn: conn.delete("erp_sessions", {"user_id": target["id"]}))
             if password:
                 await self.db(users_repo.set_password, target["id"], password)
+                if target["id"] == self.user["id"] and values["active"]:
+                    # set_password ends all sessions of the user; administrators
+                    # changing their own password here stay logged in, as on
+                    # the "My account" page.
+                    hours = int(self.cfg.get("session_hours") or 12)
+                    token = await self.db(users_repo.create_session, self.user["id"], hours,
+                                          self.request.remote_ip, self.request.headers.get("User-Agent", ""))
+                    self.set_session_cookie(token, hours)
             await self.audit("user_update", target["username"], values["role"])
             if target["id"] == self.user["id"] and (values["role"] != "admin" or not values["active"]):
                 # Administrators who removed their own rights can no longer open

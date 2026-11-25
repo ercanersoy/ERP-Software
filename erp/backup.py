@@ -15,6 +15,8 @@ import base64
 import datetime as dt
 import decimal
 import json
+import secrets
+import shutil
 import tomllib
 
 from . import __version__, charsets, tomlwriter
@@ -426,12 +428,18 @@ def _convert_record(ent, item: dict) -> tuple[dict, dict]:
     return values | meta, errors
 
 
-def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True) -> dict:
+def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True,
+                 file_map: dict[int, int] | None = None, upload_dir: str | None = None) -> dict:
     """Insert records from a backup.
 
     ``append`` adds the records with new ids; ``replace`` empties each table
     first and keeps the original ids, so links between records stay valid.
     Invalid records and records of unknown entities are skipped and counted.
+
+    ``file_map`` (data imports) translates file ids of the backup into file
+    ids of this installation (see :func:`_import_file_rows`); files the
+    backup does not contain are not linked.  Every file stays attached to one
+    record only: a file that is already used gets its own copy.
     """
     stats = {"records": 0, "skipped": 0}
     for name, rows in data.items():
@@ -455,6 +463,8 @@ def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True) 
             if mode != "replace":
                 values.pop("id", None)
             prepared.append(values)
+        if file_map is not None:
+            _link_files(conn, ent, prepared, file_map, upload_dir)
         if mode == "replace" and entity_ids_ok:
             _insert_explicit(conn, ent.table, [p for p in prepared if "id" in p])
             for p in prepared:
@@ -465,6 +475,78 @@ def _import_data(conn: Conn, data: dict, mode: str, entity_ids_ok: bool = True) 
                 conn.insert(ent.table, p)
         stats["records"] += len(prepared)
     return stats
+
+
+def _link_files(conn: Conn, ent, prepared: list[dict], file_map: dict[int, int], upload_dir: str | None) -> None:
+    """Point the file fields of imported records to files of this installation.
+
+    Appending the same export twice would otherwise attach one stored file to
+    two records, and deleting either record would delete the other's file.
+    """
+    file_fields = [f for f in ent.fields if f.is_file]
+    if not file_fields:
+        return
+    used: set[int] = set()
+    for f in file_fields:
+        used.update(int(r[f.name]) for r in conn.all(
+            f"SELECT {conn.q(f.name)} FROM {conn.q(ent.table)} WHERE {conn.q(f.name)} IS NOT NULL"))
+    for values in prepared:
+        for f in file_fields:
+            if values.get(f.name) is None:
+                continue
+            file_id = file_map.get(values[f.name])
+            if file_id is not None and file_id in used:
+                file_id = _copy_file(conn, upload_dir, file_id)
+            if file_id is not None:
+                used.add(file_id)
+            values[f.name] = file_id
+
+
+def _copy_file(conn: Conn, upload_dir: str | None, file_id: int) -> int | None:
+    """Duplicate a stored file (row and content) and return the id of the copy."""
+    row = files_repo.get_file(conn, file_id)
+    if row is None:
+        return None
+    key = secrets.token_hex(16)
+    if upload_dir:
+        source = files_repo.storage_path(upload_dir, row["storage_key"])
+        if source.exists():
+            target = files_repo.storage_path(upload_dir, key)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+    columns = [c.name for c in SYSTEM_TABLE_MAP["erp_files"].columns if c.name != "id"]
+    copy = {c: row.get(c) for c in columns} | {"storage_key": key, "created_at": utcnow()}
+    return conn.insert("erp_files", copy)
+
+
+def _import_file_rows(conn: Conn, file_rows: list[dict]) -> dict[int, int]:
+    """Store the file rows of a data export; returns ``{id in the backup: id here}``.
+
+    * a row this installation already has (same id and storage key, e.g. a
+      re-import) is used as it is;
+    * a row whose id is free keeps its id;
+    * a row whose id belongs to a different file here gets a new id.
+    Rows keeping their id are inserted first, so new ids can not take theirs.
+    """
+    existing = {int(r["id"]): r for r in files_repo.list_files(conn)}
+    mapping: dict[int, int] = {}
+    keep, renumber = [], []
+    for row in file_rows:
+        if row.get("id") is None or not row.get("storage_key"):
+            continue
+        old_id = int(row["id"])
+        here = existing.get(old_id)
+        if here is not None and here["storage_key"] == row["storage_key"]:
+            mapping[old_id] = old_id
+        elif here is None and old_id not in mapping:
+            keep.append(row)
+            mapping[old_id] = old_id
+        else:
+            renumber.append(row)
+    _insert_explicit(conn, "erp_files", keep)
+    for row in renumber:
+        mapping[int(row["id"])] = conn.insert("erp_files", {k: v for k, v in row.items() if k != "id"})
+    return mapping
 
 
 def _restore_files(doc_files: list[dict], upload_dir: str | None) -> list[dict]:
@@ -500,9 +582,8 @@ def import_toml(conn: Conn, doc: dict, mode: str = "append", upload_dir: str | N
         stats |= _merge_entities(conn, [e for e in doc.get("entities", []) if isinstance(e, dict)], menu_ids)
     if kind == "data":
         file_rows = _restore_files(list(doc.get("files", [])), upload_dir)
-        known = {int(r["id"]) for r in files_repo.list_files(conn)}
-        _insert_explicit(conn, "erp_files", [r for r in file_rows if r.get("id") not in known])
-        stats |= _import_data(conn, doc.get("data", {}) or {}, mode)
+        file_map = _import_file_rows(conn, file_rows)
+        stats |= _import_data(conn, doc.get("data", {}) or {}, mode, file_map=file_map, upload_dir=upload_dir)
     return stats
 
 

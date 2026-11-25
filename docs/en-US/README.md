@@ -115,6 +115,8 @@ Further options: required, unique, show in list, default value, help text and or
 
 Titles and labels may have up to 200 characters, default values and each choice up to 255, help texts up to 500.
 
+If a choice is removed later, records keep their value: the edit form shows it as “no longer offered” and it can be kept unchanged, but it can not be chosen for other records.
+
 Settings of a data screen: menu, access for users and dealers, title field (shown when other screens link to a record), sensor/live data, reading interval and rows per page.
 
 ## Menus
