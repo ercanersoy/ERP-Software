@@ -10,7 +10,7 @@
 | Microsoft SQL Server 2016+ | `pyodbc` (Microsoft ODBC sürücüsüyle) veya `pymssql` | Metinler NVARCHAR (Unicode) olarak saklanır |
 | PostgreSQL 12+ | `psycopg` (3) veya `psycopg2` | |
 
-Otomatik testler SQLite ve PostgreSQL üzerinde çalıştırılır.
+Otomatik testler SQLite, PostgreSQL ve MariaDB (hem MySQL hem MariaDB ayarıyla) üzerinde çalıştırılır.
 
 Sistemi kurulum sihirbazında seçin. Önce **boş bir veri tabanı** ve tablo oluşturma hakkı olan bir kullanıcı oluşturun.
 

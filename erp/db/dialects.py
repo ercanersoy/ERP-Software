@@ -390,6 +390,9 @@ class MySQLDialect(Dialect):
             database=cfg.get("name") or "",
             charset="utf8mb4",
             autocommit=False,
+            # UPDATE should report the rows it matched, as on the other systems,
+            # not only the rows whose values really changed (MySQL's default).
+            client_flag=_found_rows_flag(mod),
         )
 
     def init_connection(self, raw) -> None:
@@ -468,6 +471,14 @@ class MySQLDialect(Dialect):
         return ["COMMIT", "SET FOREIGN_KEY_CHECKS = 1"]
 
 
+def _found_rows_flag(module) -> int:
+    """The CLIENT_FOUND_ROWS connection flag of a MySQL driver (2 in the MySQL protocol)."""
+    try:
+        return importlib.import_module(f"{module.__name__}.constants.CLIENT").FOUND_ROWS
+    except (ImportError, AttributeError):  # pragma: no cover - unusual driver builds
+        return 2
+
+
 class MariaDBDialect(MySQLDialect):
     """MariaDB: MySQL compatible; may also use the official ``mariadb`` connector."""
     name = "mariadb"
@@ -486,6 +497,7 @@ class MariaDBDialect(MySQLDialect):
                 password=cfg.get("password") or "",
                 database=cfg.get("name") or "",
                 autocommit=False,
+                client_flag=_found_rows_flag(mod),  # see MySQLDialect.connect
             )
         return super().connect(cfg)
 

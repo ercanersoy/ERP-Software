@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import re
+import sys
+import sysconfig
 from pathlib import Path
 
 import tornado.web
@@ -14,7 +16,27 @@ from .base import BaseHandler
 
 # Up to 33 items per menu can have a key; further items are reachable with the arrow keys.
 MENU_KEYS = "123456789abcdfghijklmopqrstuvwxyz"  # no "e" and "n": used as shortcuts elsewhere
-DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs"
+
+
+def _docs_dir() -> Path:
+    """Directory of the documentation shown as in-app help.
+
+    In a source checkout it is ``docs/`` next to the ``erp`` package; an
+    installed package (``pip install .``) has it under
+    ``<prefix>/share/erp-software/docs`` (see ``data-files`` in pyproject.toml).
+    """
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "docs",
+        Path(sysconfig.get_path("data")) / "share" / "erp-software" / "docs",
+        Path(sys.prefix) / "share" / "erp-software" / "docs",
+    ]
+    for path in candidates:
+        if (path / "en-US" / "README.md").exists():
+            return path
+    return candidates[0]
+
+
+DOCS_DIR = _docs_dir()
 
 
 def numbered(items: list[dict]) -> list[dict]:

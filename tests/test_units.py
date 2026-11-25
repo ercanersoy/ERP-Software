@@ -159,3 +159,17 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("TEXT", kind)
         self.assertEqual(values, [dec.Decimal("12.5000"), dec.Decimal("123456789012345.6789")])
         self.assertEqual(version, str(schema.SCHEMA_VERSION))
+
+
+class PackagingTests(unittest.TestCase):
+    def test_every_documentation_language_is_installed(self):
+        """docs/<lang>/ is the in-app help; pip installs it only when pyproject.toml lists it."""
+        import tomllib
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent
+        data_files = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]["data-files"]
+        languages = sorted(p.name for p in (root / "docs").iterdir() if p.is_dir())
+        self.assertEqual(sorted(k.rsplit("/", 1)[1] for k in data_files), languages)
+        for lang in languages:
+            self.assertEqual(data_files[f"share/erp-software/docs/{lang}"], [f"docs/{lang}/*.md"])

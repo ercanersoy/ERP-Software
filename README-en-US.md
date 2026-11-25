@@ -30,7 +30,7 @@ pip install -r requirements.txt pytest
 python3 -m pytest
 ```
 
-The tests use SQLite by default and also pass on PostgreSQL. To run them against another database system, point `ERP_TEST_DB` at an empty test database (for PostgreSQL create it with `ENCODING 'UTF8'`), for example:
+The tests use SQLite by default and also pass on PostgreSQL and MariaDB. To run them against another database system, point `ERP_TEST_DB` at an empty test database (for PostgreSQL create it with `ENCODING 'UTF8'`), for example:
 
 ```
 ERP_TEST_DB='{"db_dialect": "postgresql", "db_host": "127.0.0.1", "db_name": "erp_test", "db_user": "erp", "db_password": "secret"}' python3 -m pytest

@@ -10,7 +10,7 @@
 | Microsoft SQL Server 2016+ | `pyodbc` (with the Microsoft ODBC driver) or `pymssql` | Texts are stored as NVARCHAR (Unicode) |
 | PostgreSQL 12+ | `psycopg` (3) or `psycopg2` | |
 
-The automated tests run on SQLite and PostgreSQL.
+The automated tests run on SQLite, PostgreSQL and MariaDB (with both the MySQL and the MariaDB setting).
 
 Choose the system in the setup wizard. Create an **empty database** and a user with the right to create tables first.
 

@@ -6,6 +6,7 @@ import json
 import re
 
 from erp import config
+from erp.db import Column
 
 from .helpers import PNG, WebTestCase
 
@@ -447,7 +448,7 @@ class RoundTripTests(WebTestCase):
         data = self.post("/admin/backup/data", {"format": "toml", "charset": "utf-8", "entities": ["p"],
                                                 "include_files": "1"}).body
         self.post("/admin/restore", {"charset": "", "mode": "append"}, files={"file": ("d.toml", data, "text/plain")})
-        rows = self.state.db.run_sync(lambda c: c.all('SELECT "id", "photo" FROM "d_p" ORDER BY "id"'))
+        rows = self.state.db.run_sync(lambda c: c.all(f"SELECT {c.q('id')}, {c.q('photo')} FROM {c.q('d_p')} ORDER BY {c.q('id')}"))
         self.assertEqual(len(rows), 2)
         self.assertNotEqual(rows[0]["photo"], rows[1]["photo"])
         self.assertEqual(self.get(f"/files/{rows[1]['photo']}").body, PNG)
@@ -456,7 +457,7 @@ class RoundTripTests(WebTestCase):
 
     def test_database_refusal_is_shown_on_the_form(self):
         self.create_entity("z", "Z")
-        self.state.db.run_sync(lambda c: c.execute('ALTER TABLE "d_z" ADD COLUMN "dup" TEXT').close())
+        self.state.db.run_sync(lambda c: c.execute(c.dialect.add_column_sql("d_z", Column("dup", "text"))).close())
         r = self.post("/admin/entities/z/fields/new", {"name": "dup", "label": "Dup", "field_type": "text",
                                                        "max_length": "255", "decimal_places": "", "ref_entity": "",
                                                        "currency": "TRY", "options": "", "default_value": "",

@@ -30,7 +30,7 @@ pip install -r requirements.txt pytest
 python3 -m pytest
 ```
 
-Testler varsayılan olarak SQLite kullanır ve PostgreSQL üzerinde de geçer. Başka bir veri tabanı sisteminde çalıştırmak için `ERP_TEST_DB` değişkenini boş bir test veri tabanına yöneltin (PostgreSQL için `ENCODING 'UTF8'` ile oluşturun), örneğin:
+Testler varsayılan olarak SQLite kullanır; PostgreSQL ve MariaDB üzerinde de geçer. Başka bir veri tabanı sisteminde çalıştırmak için `ERP_TEST_DB` değişkenini boş bir test veri tabanına yöneltin (PostgreSQL için `ENCODING 'UTF8'` ile oluşturun), örneğin:
 
 ```
 ERP_TEST_DB='{"db_dialect": "postgresql", "db_host": "127.0.0.1", "db_name": "erp_test", "db_user": "erp", "db_password": "secret"}' python3 -m pytest

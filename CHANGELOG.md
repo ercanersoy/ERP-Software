@@ -71,6 +71,20 @@ The test suite now runs on SQLite and PostgreSQL (`ERP_TEST_DB`).
 - A table change refused by the database (e.g. MySQL's row size limit for
   many long text fields) showed an HTTP 500 page instead of a message.
 
+### Fixed – MySQL/MariaDB and packaging (fourth review)
+
+The test suite now also runs on MariaDB, with the `mysql` and `mariadb` settings.
+
+- A full restore always failed on MySQL/MariaDB ("Duplicate entry
+  'schema_version'"): MySQL reports changed instead of matched rows for
+  UPDATE. Connections now use FOUND_ROWS, and the restore no longer relies
+  on the row count.
+- The in-app help (Help menu, API documentation link) answered 404 for
+  every page when the program was installed with `pip install .`: the
+  documentation is now installed with the package.
+- Building the package failed with setuptools 69-76 although pyproject.toml
+  allowed them; the minimum is now setuptools 77.
+
 ### Added – usability and touch screens
 
 - Touch screens: touch targets of at least 44 px, no zoom on input focus,

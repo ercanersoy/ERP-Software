@@ -116,7 +116,11 @@ class Conn:
             cur.close()
 
     def update(self, table: str, values: dict, where: dict) -> int:
-        """``UPDATE table SET values WHERE where``; returns the number of changed rows."""
+        """``UPDATE table SET values WHERE where``; returns the number of matched rows.
+
+        Matched, not changed: a row whose values stay the same counts too
+        (MySQL/MariaDB connections are opened with ``FOUND_ROWS`` for this).
+        """
         if not values:
             return 0
         sets = ", ".join(f"{self.q(c)} = ?" for c in values)

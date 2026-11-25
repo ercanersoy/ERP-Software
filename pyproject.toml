@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=69"]
+# 77+: needed for the SPDX license expression below (PEP 639)
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -35,6 +36,13 @@ include = ["erp*"]
 
 [tool.setuptools.package-data]
 erp = ["templates/*.html", "static/*", "locales/*.toml"]
+
+# The documentation is also the in-app help (erp/handlers/menus.py).  It lives
+# in docs/ next to the package, so it is installed as data files.
+[tool.setuptools.data-files]
+"share/erp-software/docs/tr-TR" = ["docs/tr-TR/*.md"]
+"share/erp-software/docs/en-US" = ["docs/en-US/*.md"]
+"share/erp-software/docs/en-GB" = ["docs/en-GB/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
