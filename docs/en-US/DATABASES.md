@@ -90,6 +90,7 @@ Relative paths are relative to the directory of the configuration file. Delete t
 
 - **HTTPS**: set `certfile` and `keyfile`, or run the program behind a reverse proxy (nginx, Apache, IIS) with HTTPS and set `xheaders = true` so that client addresses are logged correctly. Pass WebSocket upgrades for `/api/v1/stream/` through the proxy.
 - **Many users**: database work runs in a thread pool (`pool_size` connections), so the server stays responsive with many users and sensors at the same time.
+- **One server process per database**: unique fields and “one file per record” are checked by the program, which keeps simultaneous requests in order within its process. Do not let several server processes use the same database; one process serves many users.
 - **Upload size**: `max_upload_mb` limits the size of a request (default 256 MB).
 - **Service**: run `python3 -m erp --config /srv/erp/erp.toml` with systemd, a Windows service wrapper or a container.
 

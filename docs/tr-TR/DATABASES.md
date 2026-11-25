@@ -90,6 +90,7 @@ Göreli yollar, yapılandırma dosyasının bulunduğu dizine göredir. Kurulum 
 
 - **HTTPS**: `certfile` ve `keyfile` ayarlayın ya da programı HTTPS kullanan bir ters vekil sunucunun (nginx, Apache, IIS) arkasında çalıştırıp istemci adreslerinin doğru günlüğe yazılması için `xheaders = true` ayarlayın. `/api/v1/stream/` için WebSocket yükseltmelerini vekil sunucudan geçirin.
 - **Çok kullanıcı**: veri tabanı işleri bir iş parçacığı havuzunda (`pool_size` bağlantı) çalışır; böylece sunucu aynı anda çok sayıda kullanıcı ve sensörle de hızlı yanıt verir.
+- **Bir veri tabanına bir sunucu işlemi**: benzersiz alanları ve “bir dosya bir kayda aittir” kuralını program denetler ve aynı anda gelen istekleri kendi işlemi içinde sıraya koyar. Aynı veri tabanını birden çok sunucu işlemine kullandırmayın; tek bir işlem birçok kullanıcıya hizmet verir.
 - **Yükleme boyutu**: `max_upload_mb` bir isteğin boyutunu sınırlar (varsayılan 256 MB).
 - **Hizmet**: `python3 -m erp --config /srv/erp/erp.toml` komutunu systemd, bir Windows hizmet sarmalayıcısı veya bir kapsayıcı ile çalıştırın.
 

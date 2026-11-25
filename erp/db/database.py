@@ -23,15 +23,39 @@ class Conn:
     :meth:`q`; the wrapper converts them for the active database driver.
     """
 
-    def __init__(self, raw, dialect: Dialect, paramstyle: str):
+    def __init__(self, raw, dialect: Dialect, paramstyle: str, db: "Database | None" = None):
         """Wrap the DB-API connection ``raw``.
 
         Drivers with the ``format``/``pyformat`` parameter style (PyMySQL,
         psycopg, pymssql) expect ``%s`` instead of ``?``; :meth:`_sql` converts.
+        ``db`` provides the named locks of :meth:`hold`.
         """
         self.raw = raw
         self.dialect = dialect
         self._format = paramstyle in ("format", "pyformat")
+        self._db = db
+        self._held: list[tuple[str, threading.Lock]] = []
+
+    def hold(self, name: str, timeout: float = 60) -> None:
+        """Hold the lock ``name`` until this transaction has ended.
+
+        Used where the application, not the database, guarantees a rule, such
+        as unique fields ("count matching rows, then insert"): without the lock
+        two simultaneous requests could both find no match and both insert.
+        The lock is released only after COMMIT/ROLLBACK (see
+        :meth:`Database.run_sync`), so the next transaction sees the new row.
+        Locks are per server process, which is how the program runs.
+        """
+        if self._db is None or any(held == name for held, _ in self._held):
+            return
+        lock = self._db.named_lock(name)
+        if not lock.acquire(timeout=timeout):
+            raise TimeoutError(f"lock {name!r} not available")
+        self._held.append((name, lock))
+
+    def _release_locks(self) -> None:
+        while self._held:
+            self._held.pop()[1].release()
 
     def q(self, ident: str) -> str:
         """Quote an identifier (table or column name) for the active database system."""
@@ -170,6 +194,7 @@ class Database:
         self._idle: queue.LifoQueue = queue.LifoQueue()
         self._lock = threading.Lock()
         self._module = None
+        self._named_locks: dict[str, threading.Lock] = {}
 
     # -- connections ---------------------------------------------------------
     def _new_raw(self):
@@ -224,10 +249,21 @@ class Database:
         return self.dialect.paramstyle(self._module) if self._module else "qmark"
 
     # -- running work ----------------------------------------------------------
+    def named_lock(self, name: str) -> threading.Lock:
+        """The process wide lock called ``name`` (created on first use)."""
+        with self._lock:
+            return self._named_locks.setdefault(name, threading.Lock())
+
     def run_sync(self, fn, *args, **kwargs):
         """Run ``fn(conn, *args)`` in a transaction and return its result."""
         raw = self._acquire()
-        conn = Conn(raw, self.dialect, self._paramstyle())
+        conn = Conn(raw, self.dialect, self._paramstyle(), self)
+        try:
+            return self._run_in_transaction(raw, conn, fn, args, kwargs)
+        finally:
+            conn._release_locks()  # after COMMIT/ROLLBACK, see Conn.hold
+
+    def _run_in_transaction(self, raw, conn, fn, args, kwargs):
         try:
             result = fn(conn, *args, **kwargs)
             raw.commit()

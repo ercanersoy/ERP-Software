@@ -156,6 +156,7 @@ def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | N
     from . import entities as entities_repo
     from . import files as files_repo
 
+    _lock_constraints(conn, ent)
     errors: dict[str, ValidationError] = {}
     # File ids given to more than one file field of this very record.
     file_values = [values[f.name] for f in ent.fields if f.is_file and values.get(f.name) is not None]
@@ -196,6 +197,19 @@ def _check_constraints(conn: Conn, ent: Entity, values: dict, record_id: int | N
     return errors
 
 
+def _lock_constraints(conn: Conn, ent: Entity) -> None:
+    """Serialise writes of ``ent`` whose rules the application checks itself.
+
+    Unique values and "one file per record" are checked with queries, not by
+    the database, so simultaneous requests must not interleave between check
+    and write.  The lock is taken before the transaction reads anything:
+    MySQL/MariaDB (REPEATABLE READ) fix a transaction's snapshot at its first
+    read, which must not predate the other request's commit.
+    """
+    if any(f.is_unique or f.is_file for f in ent.fields):
+        conn.hold(f"constraints:{ent.name}")
+
+
 def _file_used_elsewhere(conn: Conn, ent: Entity, field_name: str, file_id: int, record_id: int | None) -> bool:
     """True when another record of ``ent`` already references ``file_id`` in any file field."""
     for f in ent.fields:
@@ -221,6 +235,7 @@ def _file_used_elsewhere(conn: Conn, ent: Entity, field_name: str, file_id: int,
 def create_record(conn: Conn, ent: Entity, values: dict, user: dict | None = None,
                   api_key_id: int | None = None) -> int:
     """Validate constraints and insert a record; returns the new id.  ``user=None`` for API keys."""
+    _lock_constraints(conn, ent)
     errors = _check_constraints(conn, ent, values, None, user)
     if errors:
         raise RecordError(errors)
@@ -241,6 +256,7 @@ def create_record(conn: Conn, ent: Entity, values: dict, user: dict | None = Non
 def update_record(conn: Conn, ent: Entity, record_id: int, values: dict, user: dict | None = None,
                   api_key_id: int | None = None) -> list[dict]:
     """Update a record; returns file rows that were replaced and must be removed."""
+    _lock_constraints(conn, ent)
     old = get_record(conn, ent, record_id)
     if old is None:
         raise KeyError(record_id)

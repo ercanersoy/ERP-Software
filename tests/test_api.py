@@ -119,6 +119,19 @@ class ApiTests(WebTestCase):
         self.assertEqual(body["sensor"], "Şube-İç")
         self.assertEqual(body["note"], "ğüşıöç")
 
+    def test_datetime_fields_are_marked_as_utc(self):
+        self.add_field("temps", "taken", "datetime")
+        code, body = self.api("POST", "/api/v1/entities/temps/records",
+                              {"sensor": "a", "taken": "2026-01-02T03:04:05+03:00"})
+        self.assertEqual(code, 201)
+        code, rec = self.api("GET", f"/api/v1/entities/temps/records/{body['id']}")
+        self.assertEqual(rec["taken"], "2026-01-02T00:04:05Z")  # UTC, like created_at
+
+    def test_lone_surrogates_are_invalid_json(self):
+        for raw in (b'{"sensor": "\\ud800"}', b'{"\\udfff": 1}'):
+            code, body = self.api("POST", "/api/v1/entities/temps/records", raw=raw)
+            self.assertEqual((code, body["error"]), (400, "invalid_json"))
+
     def test_restricted_key(self):
         token = self.create_api_key("reader", entities="temps", can_write="", allowed_ips="")
         code, body = self.api("POST", "/api/v1/entities/temps/records", {"sensor": "x"}, token=token)

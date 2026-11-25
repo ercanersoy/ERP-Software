@@ -71,9 +71,16 @@ class EntityHandler(BaseHandler):
                 if f.field_type == "reference" and ids:
                     target = entities_repo.get_entity(conn, f.ref_entity or "")
                     refs[f.name] = records_repo.reference_titles(conn, target, ids) if target else {}
+                    if target is not None and target.can_read(self.user):
+                        linkable.add(f.name)
                 elif f.is_file:
                     file_ids |= ids
             return refs, files_repo.get_files(conn, file_ids)
+
+        # Link fields whose target screen the user may open: only these are
+        # shown as links (the others would lead to a "forbidden" page).
+        linkable: set[str] = set()
+        self.linkable_refs = linkable
 
         return await self.db(load)
 
@@ -105,6 +112,8 @@ class EntityHandler(BaseHandler):
                 return {"text": loc.datetime(value)}
             case "reference":
                 title = refs.get(f.name, {}).get(value, f"#{value}")
+                if f.name not in getattr(self, "linkable_refs", ()):
+                    return {"text": title}
                 return {"text": title, "url": f"/data/{f.ref_entity}/{value}"}
             case "document" | "image" | "video":
                 row = files.get(value)

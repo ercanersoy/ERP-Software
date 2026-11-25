@@ -81,6 +81,10 @@ class MenuHandler(BaseHandler):
         if mid is not None and mid not in menu_ids:
             raise tornado.web.HTTPError(404)
         visible, readable = visible_tree(menus, entities, self.user)
+        if mid is not None and mid not in visible:
+            # A menu without anything the user may open is hidden in the menus;
+            # opening it by its address must not reveal its title either.
+            raise tornado.web.HTTPError(404)
         # Entities whose menu was removed show up at the top level.
         items: list[dict] = []
         for m in menus:

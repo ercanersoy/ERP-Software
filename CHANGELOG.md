@@ -85,6 +85,26 @@ The test suite now also runs on MariaDB, with the `mysql` and `mariadb` settings
 - Building the package failed with setuptools 69-76 although pyproject.toml
   allowed them; the minimum is now setuptools 77.
 
+### Fixed – concurrency, API and permissions (fifth review)
+
+Found with new whole-application tests (every page in every role and
+language, every form with unusual input, simultaneous requests), which now
+belong to the test suite.
+
+- Simultaneous requests could store the same value in a unique field (or
+  attach one file to two records): the check and the write were not
+  serialised. Seen on SQLite, PostgreSQL and MariaDB.
+- Date-time fields were returned by the API without the "Z" (UTC) marker,
+  unlike created_at and the documentation, so clients could read them as
+  local time. **API clients that worked around this must drop the
+  workaround.**
+- JSON containing lone UTF-16 surrogates ("\ud800") caused HTTP 500 in
+  the REST API; it is now refused as invalid JSON (also on the WebSocket).
+- Menus without anything the user may open were hidden in the menu but
+  could still be opened by address, showing their title.
+- Link fields pointing to a data screen the user may not open were shown
+  as links that led to a "forbidden" page; they are plain text now.
+
 ### Added – usability and touch screens
 
 - Touch screens: touch targets of at least 44 px, no zoom on input focus,

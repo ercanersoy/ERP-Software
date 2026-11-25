@@ -67,6 +67,21 @@ def entity_json(ent) -> dict:
     }
 
 
+def load_json(text: str | bytes):
+    """Parse JSON sent by a client; raises ``ValueError`` for invalid input.
+
+    JSON may contain escapes of lone UTF-16 surrogates (``"\\ud800"``).  Python
+    decodes them, but they can not be encoded as UTF-8, so storing or
+    echoing such a value would fail with HTTP 500.  They are refused here.
+    """
+    value = json.loads(text)
+    try:
+        json.dumps(value, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError("lone surrogate in JSON string") from None
+    return value
+
+
 def errors_json(errors: dict[str, ValidationError]) -> dict[str, str]:
     """Validation errors as ``{field: code}``, e.g. ``{"celsius": "invalid_number"}``."""
     return {name: err.key.removeprefix("error.") for name, err in errors.items()}
@@ -185,7 +200,7 @@ class ApiHandler(ApiAuth, tornado.web.RequestHandler):
         if "charset=" in ctype:
             charset = charsets.normalize(ctype.split("charset=", 1)[1].split(";")[0].strip().strip('"'))
         try:
-            return json.loads(charsets.decode(self.request.body, charset) or "null")
+            return load_json(charsets.decode(self.request.body, charset) or "null")
         except ValueError:
             raise ApiError(400, "invalid_json") from None
 
@@ -486,7 +501,7 @@ class StreamHandler(ApiAuth, tornado.websocket.WebSocketHandler):
         state = self.application.settings["erp_state"]
         ent = self.ent
         try:
-            payload = json.loads(message)
+            payload = load_json(message)
             if isinstance(payload, dict) and payload.get("event") in ("config", "ping"):
                 current = await state.db.run(entities_repo.get_entity, ent.name)
                 interval = current.read_interval_ms if current else ent.read_interval_ms

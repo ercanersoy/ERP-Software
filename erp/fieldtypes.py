@@ -324,7 +324,13 @@ class Field:
             return None
         if isinstance(value, decimal.Decimal):
             return str(value)
-        if isinstance(value, (dt.datetime, dt.date)):
+        if isinstance(value, dt.datetime):
+            # Stored as naive UTC: the "Z" tells clients so (without it ISO 8601
+            # means local time), as for created_at / updated_at.
+            if value.tzinfo is not None:
+                value = value.astimezone(dt.UTC).replace(tzinfo=None)
+            return value.isoformat() + "Z"
+        if isinstance(value, dt.date):
             return value.isoformat()
         return value
 
